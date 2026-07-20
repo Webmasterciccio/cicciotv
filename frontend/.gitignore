@@ -12,6 +12,14 @@ dist
 dist-ssr
 *.local
 
+# Config locale (IP LAN del backend, specifico per rete/macchina)
+.env
+
+# Keystore di firma release (segreto, mai committare)
+*.jks
+*.keystore
+key.properties
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

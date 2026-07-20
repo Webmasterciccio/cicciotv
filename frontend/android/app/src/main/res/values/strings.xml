@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CICCIO TV</string>
+    <string name="title_activity_main">CICCIO TV</string>
+    <string name="package_name">com.ciccio.cicciotv</string>
+    <string name="custom_url_scheme">com.ciccio.cicciotv</string>
+</resources>

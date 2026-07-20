@@ -1,0 +1,13 @@
+{
+  "appId": "com.ciccio.cicciotv",
+  "appName": "CICCIO TV",
+  "webDir": "dist",
+  "server": {
+    "cleartext": true
+  },
+  "plugins": {
+    "CapacitorHttp": {
+      "enabled": true
+    }
+  }
+}

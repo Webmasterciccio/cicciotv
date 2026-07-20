@@ -69,6 +69,43 @@ def _get_series_or_404(db: Session, series_id: int):
     return series
 
 
+@router.get("/{series_id}/watch-providers", response_model=schemas.WatchProviders)
+def watch_providers(series_id: int, db: Session = Depends(get_db)):
+    """Servizi su cui e' possibile guardare la serie (fonte: TMDB, regione IT)."""
+    series = _get_series_or_404(db, series_id)
+    if series.tmdb_id is None:
+        return schemas.WatchProviders()
+    return tmdb_client.get_watch_providers(series.tmdb_id, media_type=series.media_type)
+
+
+@router.get("/{series_id}/tmdb", response_model=schemas.TmdbDetails)
+def tmdb_details(series_id: int, db: Session = Depends(get_db)):
+    """Tutte le informazioni disponibili della serie su TMDB (trama, generi, cast, ...)."""
+    series = _get_series_or_404(db, series_id)
+    if series.tmdb_id is None:
+        return schemas.TmdbDetails()
+    if series.media_type == "movie":
+        details = tmdb_client.get_movie_extended(series.tmdb_id)
+    else:
+        details = tmdb_client.get_tv_extended(series.tmdb_id)
+
+    # Backfill dei generi (per le statistiche/insight) se mancanti in libreria.
+    if not series.genres and details.get("genres"):
+        series.genres = ",".join(details["genres"])
+        db.commit()
+
+    return details
+
+
+@router.get("/{series_id}/recommendations", response_model=list[schemas.TmdbRecommendation])
+def recommendations(series_id: int, db: Session = Depends(get_db)):
+    """Serie consigliate/simili a partire da questa (fonte: TMDB)."""
+    series = _get_series_or_404(db, series_id)
+    if series.tmdb_id is None:
+        return []
+    return tmdb_client.get_recommendations(series.tmdb_id, media_type=series.media_type)
+
+
 @router.get("/{series_id}/episodes", response_model=list[schemas.EpisodeRead])
 def list_episodes(series_id: int, db: Session = Depends(get_db)):
     """Elenca gli episodi di una serie con il loro stato di visione."""
@@ -108,6 +145,19 @@ def update_episode(
     if episode is None:
         raise HTTPException(status_code=404, detail="Episodio non trovato")
     return crud.set_episode_watched(db, series, episode, payload.watched)
+
+
+@router.post(
+    "/{series_id}/episodes/{episode_id}/watch-up-to",
+    response_model=list[schemas.EpisodeRead],
+)
+def watch_up_to(series_id: int, episode_id: int, db: Session = Depends(get_db)):
+    """Segna come visti tutti gli episodi fino a questo incluso (utile quando salti avanti)."""
+    series = _get_series_or_404(db, series_id)
+    episode = crud.get_episode(db, series_id, episode_id)
+    if episode is None:
+        raise HTTPException(status_code=404, detail="Episodio non trovato")
+    return crud.set_watched_up_to(db, series, episode)
 
 
 @router.patch("/{series_id}/seasons/{season_number}", response_model=list[schemas.EpisodeRead])

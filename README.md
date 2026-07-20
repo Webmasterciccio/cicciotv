@@ -47,6 +47,17 @@ Il server parte su **http://127.0.0.1:8000**.
 - Documentazione interattiva (provi le API dal browser): **http://127.0.0.1:8000/docs**
 - Il database `cicciotv.db` viene creato automaticamente al primo avvio.
 
+Per usare l'app **dal telefono Android** (vedi sezione dedicata piu' sotto) il
+server deve accettare connessioni dalla rete locale, non solo dal PC stesso:
+
+```powershell
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+> Al primo avvio in questa modalita' Windows potrebbe mostrare un prompt del
+> Firewall Defender ("Consenti a Python di comunicare su reti private/pubbliche"):
+> va accettato, altrimenti il telefono non riuscira' a raggiungere il server.
+
 ## Frontend (installazione e avvio)
 
 Installazione (una volta sola):
@@ -77,6 +88,63 @@ Pagine disponibili:
 - **Dettaglio serie** (`/serie/{id}`) — cambia stato/voto, spunta gli episodi visti
   (lo stato della serie si aggiorna da solo: si sposta automaticamente su "in corso"
   al primo episodio visto e su "vista" quando li hai visti tutti)
+
+## App Android
+
+L'app Android e' lo stesso frontend React impacchettato con
+[Capacitor](https://capacitorjs.com/) in un guscio nativo (WebView). Il
+codice dell'interfaccia e' identico a quello del sito: cambia solo l'indirizzo
+del backend, che nel telefono non puo' essere `127.0.0.1` (punterebbe al
+telefono stesso) ma deve essere l'IP del PC nella rete locale.
+
+**In questo ambiente non sono presenti Java/Android SDK**, quindi il progetto
+nativo e' stato generato ma non e' stato possibile compilarlo in un APK:
+serve **Android Studio** (che include tutto il necessario) sulla tua macchina
+per completare la build.
+
+### Requisiti
+- [Android Studio](https://developer.android.com/studio) installato
+- Telefono e PC sulla **stessa rete Wi-Fi**
+
+### Configurazione IP (da rifare se cambia la rete)
+
+`frontend/.env` contiene l'indirizzo del PC usato dall'app per raggiungere il
+backend, attualmente impostato su `http://192.168.1.56:8000` (IP Wi-Fi
+rilevato su questo PC). Se cambia (es. router riavviato, altra rete), aggiorna
+il file:
+
+```
+VITE_API_BASE_URL=http://<IP-DEL-TUO-PC>:8000
+```
+
+Trovi l'IP attuale con `ipconfig` (campo "Indirizzo IPv4" della rete attiva).
+
+### Build dell'APK
+
+Dopo ogni modifica al frontend o all'IP, rigenera il bundle nativo:
+
+```powershell
+cd frontend
+npm run build
+npx cap sync android
+```
+
+Poi apri il progetto in Android Studio:
+
+```powershell
+npx cap open android
+```
+
+In Android Studio: **Build → Build Bundle(s) / APK(s) → Build APK(s)**. L'APK
+generato (in `android/app/build/outputs/apk/debug/`) va copiato sul telefono
+oppure, con il telefono collegato via USB e il debug USB attivo, si puo'
+lanciare direttamente con il tasto ▶ Run di Android Studio.
+
+### Prima di usarla
+1. Avvia il backend con `uvicorn app.main:app --host 0.0.0.0 --port 8000`
+   (deve restare acceso: l'app Android non funziona se il PC e' spento).
+2. Accetta l'eventuale prompt del Firewall di Windows al primo avvio.
+3. Apri l'app sul telefono: dovrebbe mostrare la stessa libreria vista nel browser.
 
 ## Endpoint
 
@@ -155,10 +223,13 @@ cicciotv/
 │       └── tmdb.py      # endpoint /tmdb (ricerca e import)
 ├── frontend/
 │   ├── src/
-│   │   ├── api.js               # chiamate al backend
+│   │   ├── api.js               # chiamate al backend (URL da VITE_API_BASE_URL)
 │   │   ├── App.jsx               # routing (react-router-dom)
 │   │   ├── components/           # Nav, SeriesCard, Poster
 │   │   └── pages/                # Dashboard, Search, SeriesDetail
+│   ├── android/                  # progetto nativo Android (Capacitor)
+│   ├── capacitor.config.json     # config app Android (appId, cleartext HTTP)
+│   ├── .env                      # IP LAN del backend (non versionato)
 │   └── package.json
 ├── requirements.txt
 ├── .env.example         # modello per la chiave TMDB (copiare in .env)

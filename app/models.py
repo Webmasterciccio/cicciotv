@@ -93,6 +93,16 @@ class UserSetting(Base):
     value = Column(Text, nullable=True)
 
 
+class Dismissal(Base):
+    """Consiglio scartato dall'utente ('non mi interessa'): non verra' piu' mostrato."""
+
+    __tablename__ = "dismissals"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
+    media_type = Column(String, primary_key=True)  # "tv" o "movie"
+    tmdb_id = Column(Integer, primary_key=True)
+
+
 class User(Base):
     """Un utente che puo' accedere all'app tramite PIN."""
 

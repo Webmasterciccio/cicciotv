@@ -1270,12 +1270,77 @@ select {
 }
 
 .suggestion-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 12px;
   overflow: hidden;
   background: var(--surface);
+}
+
+.suggestions-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.suggestions-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.suggestions-controls select {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.5rem;
+}
+
+.suggestions-lang {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.suggestion-dismiss {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  z-index: 2;
+  width: 1.7rem;
+  height: 1.7rem;
+  padding: 0;
+  display: grid;
+  place-content: center;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.suggestion-dismiss:hover {
+  background: var(--danger);
+}
+
+.suggestion-reason {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--accent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.suggestions-more {
+  display: block;
+  margin: 1.25rem auto 0;
+  padding: 0.6rem 1.5rem;
 }
 
 .suggestion-body {

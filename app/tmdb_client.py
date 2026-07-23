@@ -269,6 +269,7 @@ def _norm_item(item: dict[str, Any], media_type: str) -> dict[str, Any]:
         "first_air_date": (item.get("release_date") if is_movie else item.get("first_air_date"))
         or None,
         "overview": item.get("overview") or None,
+        "original_language": item.get("original_language") or None,
     }
 
 
@@ -278,22 +279,49 @@ def get_genres(media_type: str = "tv") -> list[dict[str, Any]]:
     return [{"id": g["id"], "name": g.get("name")} for g in data.get("genres", [])]
 
 
+# Mappa i valori di ordinamento "amichevoli" ai parametri sort_by di TMDB.
+_SORT_MAP = {
+    "popularity": "popularity.desc",
+    "rating": "vote_average.desc",
+    "recent": "first_air_date.desc",  # per i film viene tradotto in primary_release_date
+}
+
+
 def discover_by_genres(
-    genre_ids: list[int], media_type: str = "tv", page: int = 1
+    genre_ids: list[int],
+    media_type: str = "tv",
+    page: int = 1,
+    sort: str = "popularity",
+    min_rating: float | None = None,
+    year_from: int | None = None,
+    lang: str | None = None,
 ) -> list[dict[str, Any]]:
-    """Trova serie o film per uno o piu' generi, ordinati per popolarita'."""
+    """Trova serie o film per uno o piu' generi, con ordinamento e filtri."""
     if not genre_ids:
         return []
-    data = _get(
-        f"/discover/{_media_path(media_type)}",
-        {
-            "with_genres": ",".join(str(g) for g in genre_ids),
-            "sort_by": "popularity.desc",
-            "vote_count.gte": 50,
-            "include_adult": "false",
-            "page": page,
-        },
-    )
+    is_movie = media_type == "movie"
+    sort_by = _SORT_MAP.get(sort, "popularity.desc")
+    if is_movie and sort_by == "first_air_date.desc":
+        sort_by = "primary_release_date.desc"
+
+    params: dict[str, Any] = {
+        "with_genres": ",".join(str(g) for g in genre_ids),
+        "sort_by": sort_by,
+        # Con l'ordinamento per voto serve una soglia alta di voti per evitare
+        # titoli oscuri con 10/10 su pochissime valutazioni.
+        "vote_count.gte": 200 if sort == "rating" else 50,
+        "include_adult": "false",
+        "page": page,
+    }
+    if min_rating is not None:
+        params["vote_average.gte"] = min_rating
+    if year_from is not None:
+        key = "primary_release_date.gte" if is_movie else "first_air_date.gte"
+        params[key] = f"{year_from}-01-01"
+    if lang:
+        params["with_original_language"] = lang
+
+    data = _get(f"/discover/{_media_path(media_type)}", params)
     return [_norm_item(item, media_type) for item in data.get("results", [])]
 
 

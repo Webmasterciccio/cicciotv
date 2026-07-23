@@ -169,6 +169,15 @@ class TmdbRecommendation(BaseModel):
     vote_average: Optional[float] = None
     first_air_date: Optional[str] = None
     overview: Optional[str] = None
+    original_language: Optional[str] = None
+    reason: Optional[str] = None  # es. "Perché hai visto «Dark»"
+
+
+class DismissRequest(BaseModel):
+    """Payload per scartare un consiglio ('non mi interessa')."""
+
+    tmdb_id: int
+    media_type: str = Field(default="tv", pattern="^(tv|movie)$")
 
 
 class Genre(BaseModel):

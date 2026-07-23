@@ -150,8 +150,22 @@ export function getGenres(type = 'tv') {
   return request(`/tmdb/genres?type=${type}`)
 }
 
-export function getSuggestions(limit = 20, type = 'tv') {
-  return request(`/tmdb/suggestions?limit=${limit}&type=${type}`)
+export function getSuggestions(type = 'tv', opts = {}) {
+  const { limit = 20, sort, minRating, yearFrom, lang, exclude } = opts
+  const params = new URLSearchParams({ type, limit })
+  if (sort) params.set('sort', sort)
+  if (minRating) params.set('min_rating', minRating)
+  if (yearFrom) params.set('year_from', yearFrom)
+  if (lang) params.set('lang', lang)
+  if (exclude && exclude.length) params.set('exclude', exclude.join(','))
+  return request(`/tmdb/suggestions?${params.toString()}`)
+}
+
+export function dismissSuggestion(tmdbId, type = 'tv') {
+  return request('/tmdb/suggestions/dismiss', {
+    method: 'POST',
+    body: JSON.stringify({ tmdb_id: tmdbId, media_type: type }),
+  })
 }
 
 // --- Impostazioni & statistiche ---

@@ -238,6 +238,55 @@ def get_library_tmdb_ids(
     return {r[0] for r in query.all()}
 
 
+# Voto minimo perche' un titolo in libreria sia considerato "piaciuto" (seme).
+_SEED_MIN_RATING = 7
+
+
+def get_seed_series(
+    db: Session, user_id: int, media_type: str, limit: int = 8
+) -> list[models.Series]:
+    """Titoli 'piaciuti' dall'utente usati come semi per i consigli:
+    completati (status=vista) oppure votati alti. Solo quelli con tmdb_id."""
+    query = (
+        db.query(models.Series)
+        .filter(
+            models.Series.user_id == user_id,
+            models.Series.media_type == media_type,
+            models.Series.tmdb_id.isnot(None),
+        )
+        .filter(
+            (models.Series.status == Status.vista)
+            | (models.Series.rating >= _SEED_MIN_RATING)
+        )
+    )
+    # I preferiti prima: voto piu' alto, poi finiti di recente.
+    rows = query.all()
+    rows.sort(
+        key=lambda s: (s.rating or 0, s.finished_at or s.updated_at or _now()),
+        reverse=True,
+    )
+    return rows[:limit]
+
+
+def get_dismissed_ids(db: Session, user_id: int, media_type: str) -> set[int]:
+    rows = (
+        db.query(models.Dismissal.tmdb_id)
+        .filter(
+            models.Dismissal.user_id == user_id,
+            models.Dismissal.media_type == media_type,
+        )
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
+def add_dismissal(db: Session, user_id: int, media_type: str, tmdb_id: int) -> None:
+    exists = db.get(models.Dismissal, (user_id, media_type, tmdb_id))
+    if exists is None:
+        db.add(models.Dismissal(user_id=user_id, media_type=media_type, tmdb_id=tmdb_id))
+        db.commit()
+
+
 # --- Statistiche ---
 
 

@@ -190,6 +190,44 @@ class SettingsUpdate(BaseModel):
     preferred_genres_movie: Optional[list[int]] = None
 
 
+class LoginRequest(BaseModel):
+    """Payload di login: solo il PIN."""
+
+    pin: str = Field(..., min_length=4, max_length=32)
+
+
+class UserRead(BaseModel):
+    """Un utente (senza dati sensibili: mai il PIN)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    name: str
+
+
+class LoginResponse(BaseModel):
+    token: str
+    user: UserRead
+
+
+class AuthStatus(BaseModel):
+    """Stato dell'autenticazione: serve al frontend per capire se e' il primo avvio."""
+
+    users_exist: bool
+
+
+class UserCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=40)
+    pin: str = Field(..., min_length=4, max_length=32)
+
+
+class UserUpdate(BaseModel):
+    """Aggiornamento parziale di un utente (nome e/o nuovo PIN)."""
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=40)
+    pin: Optional[str] = Field(default=None, min_length=4, max_length=32)
+
+
 class TopSeries(BaseModel):
     id: int
     title: str

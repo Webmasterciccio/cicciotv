@@ -51,6 +51,8 @@ button.danger {
 }
 
 input[type='text'],
+input[type='password'],
+input[type='number'],
 select {
   font: inherit;
   padding: 0.5rem 0.75rem;
@@ -1301,4 +1303,223 @@ select {
   margin-top: auto;
   padding: 0.4rem 0.6rem;
   font-size: 0.85rem;
+}
+
+/* --- Autenticazione: splash, logout, login PIN, utenti --- */
+
+.app-splash {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  color: var(--text-muted);
+}
+
+/* Il titolo resta centrato: il pulsante Esci va ancorato a destra. */
+.topbar {
+  position: sticky;
+  justify-content: center;
+}
+
+.logout-btn {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  margin-top: calc(env(safe-area-inset-top) / 2);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.logout-btn span {
+  display: none;
+}
+
+@media (min-width: 480px) {
+  .logout-btn span {
+    display: inline;
+  }
+}
+
+/* Pagina di login */
+
+.login-page {
+  min-height: 100vh;
+  display: grid;
+  place-content: center;
+  padding: 1.5rem;
+  padding-top: calc(1.5rem + env(safe-area-inset-top));
+}
+
+.login-card {
+  width: min(360px, 90vw);
+  text-align: center;
+}
+
+.login-title {
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  margin: 0 0 0.25rem;
+}
+
+.login-subtitle {
+  color: var(--text-muted);
+  margin: 0 0 1.5rem;
+}
+
+.pin-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.7rem;
+  min-height: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.pin-dot {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.pin-dot.filled {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.login-message {
+  min-height: 1.2rem;
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.login-message.error {
+  color: var(--danger);
+}
+
+.pin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+.pin-key {
+  aspect-ratio: 1 / 1;
+  font-size: 1.5rem;
+  font-weight: 600;
+  border-radius: 50%;
+  display: grid;
+  place-content: center;
+}
+
+.pin-key-action {
+  font-size: 1.3rem;
+  color: var(--text-muted);
+  border-color: transparent;
+  background: transparent;
+}
+
+.pin-key-enter {
+  aspect-ratio: 1 / 1;
+  font-size: 0.95rem;
+  border-radius: 50%;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.setup-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  text-align: left;
+}
+
+.setup-form .login-subtitle {
+  text-align: center;
+  margin-bottom: 0.5rem;
+}
+
+.setup-submit {
+  margin-top: 0.5rem;
+  padding: 0.7rem;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 600;
+}
+
+.login-hint {
+  margin-top: 1.5rem;
+  text-align: center;
+}
+
+.login-hint code {
+  display: inline-block;
+  margin-top: 0.25rem;
+  padding: 0.15rem 0.4rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+/* Sezione utenti nelle Impostazioni */
+
+.users-section {
+  margin-top: 2.5rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1.5rem;
+}
+
+.users-list {
+  list-style: none;
+  padding: 0;
+  margin: 1rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.user-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding: 0.6rem 0.8rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.user-name {
+  font-weight: 600;
+}
+
+.user-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.user-actions button {
+  padding: 0.35rem 0.7rem;
+  font-size: 0.85rem;
+}
+
+.user-add {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.user-add input {
+  flex: 1;
+  min-width: 6rem;
 }

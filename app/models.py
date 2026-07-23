@@ -76,6 +76,30 @@ class Setting(Base):
     value = Column(Text, nullable=True)
 
 
+class User(Base):
+    """Un utente che puo' accedere all'app tramite PIN."""
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)  # etichetta visibile, es. "Ciccio"
+    # Il PIN non e' mai salvato in chiaro: solo hash PBKDF2 + sale casuale.
+    pin_hash = Column(String, nullable=False)
+    pin_salt = Column(String, nullable=False)
+    created_at = Column(DateTime, default=_now)
+
+
+class AuthSession(Base):
+    """Un token di sessione emesso al login (permette 'resta connesso' e 'esci')."""
+
+    __tablename__ = "auth_sessions"
+
+    token = Column(String, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    created_at = Column(DateTime, default=_now)
+    expires_at = Column(DateTime, nullable=False)
+
+
 class Episode(Base):
     __tablename__ = "episodes"
     __table_args__ = (

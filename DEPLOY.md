@@ -1,20 +1,21 @@
 # Deploy di CiccioTV su una VM Ubuntu (Oracle Cloud)
 
 Obiettivo: raggiungere CiccioTV da **qualsiasi browser, ovunque**, tramite un
-dominio gratuito **`cicciotv.duckdns.org`** con **HTTPS** e **password**, senza
-esporre il backend direttamente su internet.
+dominio gratuito **`cicciotv.duckdns.org`** con **HTTPS**, protetto da un **login
+con PIN** dentro l'app, senza esporre il backend direttamente su internet.
 
 Architettura:
 
 ```
-Internet ──HTTPS──► Caddy (porte 80/443, password + certificato)
-                      ├── /api/* ──► uvicorn/FastAPI su 127.0.0.1:8000
+Internet ──HTTPS──► Caddy (porte 80/443, certificato)
+                      ├── /api/* ──► uvicorn/FastAPI su 127.0.0.1:8000  (login via PIN)
                       └── tutto il resto ──► sito React (frontend/dist)
 ```
 
 Il backend ascolta **solo su localhost**: da fuori si passa obbligatoriamente da
-Caddy, che chiede la password. Sostituisci `cicciotv.duckdns.org` col tuo dominio
-vero se ne scegli un altro.
+Caddy. L'accesso è protetto dal login con PIN gestito dall'app stessa (tabelle
+utenti/sessioni). Sostituisci `cicciotv.duckdns.org` col tuo dominio vero se ne
+scegli un altro.
 
 ---
 
@@ -84,7 +85,7 @@ sudo apt install -y git python3-venv python3-pip
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
-# Caddy (reverse proxy + HTTPS + password)
+# Caddy (reverse proxy + HTTPS)
 sudo apt install -y debian-keyring debian-archive-keyring apt-transport-https curl
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | sudo gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
 curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' | sudo tee /etc/apt/sources.list.d/caddy-stable.list
@@ -139,6 +140,16 @@ curl http://127.0.0.1:8000/
 
 Deve restituire il messaggio di stato del server. Log: `journalctl -u cicciotv -f`.
 
+### 7b. Il primo utente (PIN di accesso)
+
+Il login usa un **PIN**, ma **non serve creare nulla da terminale**: al primo
+accesso da browser/app, se non esiste ancora nessun utente, appare un form
+"Primo avvio: crea il tuo accesso" (nome + PIN) che ti registra e ti fa entrare
+subito. Gli altri utenti si aggiungono poi dall'app (Impostazioni → Utenti).
+
+> In alternativa, se preferisci crearlo da riga di comando:
+> `cd ~/cicciotv && .venv/bin/python -m app.create_user`
+
 ---
 
 ## 8. (Opzionale) Aggiornamento automatico IP DuckDNS
@@ -177,29 +188,22 @@ Questo genera `frontend/dist`, che è il percorso indicato nel Caddyfile.
 
 ---
 
-## 10. Configurare Caddy (HTTPS + password)
+## 10. Configurare Caddy (HTTPS + reverse proxy)
 
-1. Genera l'hash della password d'accesso:
+Il login è dentro l'app (PIN), quindi Caddy serve solo per HTTPS e proxy: niente
+password da configurare qui.
 
-   ```bash
-   caddy hash-password
-   ```
-
-   Digita la password che vuoi (due volte) e copia l'hash risultante
-   (inizia con `$2a$...`).
-
-2. Copia il Caddyfile e inserisci l'hash:
+1. Copia il Caddyfile:
 
    ```bash
    sudo cp ~/cicciotv/deploy/Caddyfile /etc/caddy/Caddyfile
    sudo nano /etc/caddy/Caddyfile
    ```
 
-   Nel file: cambia l'utente se vuoi (`ciccio`), incolla l'hash al posto di
-   `SOSTITUISCI_CON_HASH_BCRYPT`, e controlla che il percorso `root *` punti a
-   `/home/ubuntu/cicciotv/frontend/dist`.
+   Controlla solo che il dominio sia il tuo e che il percorso `root *` punti a
+   `/home/ubuntu/cicciotv/frontend/dist`. Salva con Ctrl+O, Invio, Ctrl+X.
 
-3. Riavvia Caddy:
+2. Riavvia Caddy:
 
    ```bash
    sudo systemctl restart caddy
@@ -215,10 +219,12 @@ Questo genera `frontend/dist`, che è il percorso indicato nel Caddyfile.
 
 Apri **`https://cicciotv.duckdns.org`** da qualsiasi dispositivo:
 
-- il browser chiede **utente e password** → inserisci quelli del passo 10,
+- al **primissimo** accesso appare il form "crea il tuo accesso" (nome + PIN),
+- dalle volte successive appare il **tastierino PIN** → inserisci il PIN scelto,
 - dopo il login vedi la tua libreria,
 - lucchetto verde = HTTPS a posto.
 
+Resti connesso per ~2 giorni; il pulsante **Esci** in alto a destra chiude la sessione.
 Sul telefono puoi **"Aggiungi a schermata Home"** per avere un'icona come un'app,
 usando solo il browser.
 
@@ -226,20 +232,15 @@ usando solo il browser.
 
 ## 12. App Android (guscio Capacitor) verso il dominio
 
-L'app parla col dominio da un'origine diversa, quindi le credenziali vanno
-incorporate nella build. **Sul tuo PC Windows**, nella cartella `frontend`:
+Ora l'app mostra la **stessa pagina di login** del browser: nessuna password
+incorporata nell'APK, si digita il PIN all'avvio. Basta puntarla al dominio.
+**Sul tuo PC Windows**, nella cartella `frontend`:
 
-1. Metti in `frontend/.env` il dominio e le credenziali (stessa password del
-   passo 10):
+1. Metti in `frontend/.env` solo l'indirizzo del backend:
 
    ```
    VITE_API_BASE_URL=https://cicciotv.duckdns.org/api
-   VITE_API_USER=ciccio
-   VITE_API_PASS=la_password_scelta
    ```
-
-   > Attenzione: così la password finisce dentro l'APK. Protegge dagli sconosciuti
-   > su internet, non da chi ti sfila e decompila l'app. Per uso personale va bene.
 
 2. Ricostruisci e sincronizza:
 
@@ -252,10 +253,8 @@ incorporate nella build. **Sul tuo PC Windows**, nella cartella `frontend`:
 
    In Android Studio: **Build → Build APK(s)**, installa l'APK sul telefono.
 
-Da ora l'app funziona **ovunque** (Wi-Fi, 4G), non più solo in rete locale.
-
-> Nota sicurezza: `frontend/.env` è già in `.gitignore`, quindi le credenziali
-> dell'app **non** finiscono su GitHub. Tienile fuori dai commit.
+Da ora l'app funziona **ovunque** (Wi-Fi, 4G), non più solo in rete locale, e
+all'apertura chiede il PIN come il sito.
 
 ---
 

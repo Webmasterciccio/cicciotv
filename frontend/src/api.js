@@ -1,24 +1,35 @@
 // Nell'app Android "127.0.0.1" e' il telefono stesso, non il PC: va usato
 // l'indirizzo LAN del PC (vedi frontend/.env). Nel browser desktop il default
 // resta localhost. In produzione (dietro Caddy sullo stesso dominio) si usa il
-// percorso relativo "/api" cosi' il browser riusa da solo la password Basic Auth.
+// percorso relativo "/api".
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
 
-// Solo per la build dell'app Android: il WebView parla col dominio da un'origine
-// diversa, quindi la password va mandata a mano nell'header Authorization. Nel
-// browser questi restano vuoti e la Basic Auth la gestisce direttamente il browser.
-const API_USER = import.meta.env.VITE_API_USER
-const API_PASS = import.meta.env.VITE_API_PASS
-const AUTH_HEADER =
-  API_USER ? { Authorization: `Basic ${btoa(`${API_USER}:${API_PASS ?? ''}`)}` } : {}
+// Il token di sessione (ottenuto col login via PIN) e' salvato sul dispositivo e
+// mandato in ogni richiesta nell'header Authorization. Vale sia per il browser
+// che per l'app Android: nessuna password incorporata nel codice.
+const TOKEN_KEY = 'cicciotv_token'
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token) {
+  if (token) localStorage.setItem(TOKEN_KEY, token)
+  else localStorage.removeItem(TOKEN_KEY)
+}
 
 async function request(path, options = {}) {
   const url = `${API_BASE_URL}${path}`
+  const token = getToken()
   let response
   try {
     response = await fetch(url, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...AUTH_HEADER, ...options.headers },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...options.headers,
+      },
     })
   } catch (err) {
     // Un fetch() fallito a livello di rete (DNS, connessione rifiutata, CORS,
@@ -28,6 +39,13 @@ async function request(path, options = {}) {
     const error = new Error(`Rete non raggiungibile su ${url} (${err.name}: ${err.message})`)
     error.cause = err
     throw error
+  }
+
+  // Token scaduto/non valido durante l'uso: puliamo e segnaliamo all'app di
+  // tornare al login. (Non scatta al login stesso, dove il token non c'e' ancora.)
+  if (response.status === 401 && token) {
+    setToken(null)
+    window.dispatchEvent(new Event('cicciotv:unauthorized'))
   }
 
   if (!response.ok) {
@@ -45,6 +63,58 @@ async function request(path, options = {}) {
 
   if (response.status === 204) return null
   return response.json()
+}
+
+// --- Autenticazione ---
+
+export function getAuthStatus() {
+  return request('/auth/status')
+}
+
+export async function login(pin) {
+  const res = await request('/auth/login', { method: 'POST', body: JSON.stringify({ pin }) })
+  setToken(res.token)
+  return res.user
+}
+
+export async function setupFirstUser(name, pin) {
+  const res = await request('/auth/setup', {
+    method: 'POST',
+    body: JSON.stringify({ name, pin }),
+  })
+  setToken(res.token)
+  return res.user
+}
+
+export async function logout() {
+  try {
+    await request('/auth/logout', { method: 'POST' })
+  } catch {
+    // anche se la chiamata fallisse, cancelliamo comunque il token locale
+  }
+  setToken(null)
+}
+
+export function getMe() {
+  return request('/auth/me')
+}
+
+// --- Utenti (gestione) ---
+
+export function listUsers() {
+  return request('/users')
+}
+
+export function createUser(name, pin) {
+  return request('/users', { method: 'POST', body: JSON.stringify({ name, pin }) })
+}
+
+export function updateUser(id, patch) {
+  return request(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) })
+}
+
+export function deleteUser(id) {
+  return request(`/users/${id}`, { method: 'DELETE' })
 }
 
 // --- Serie ---

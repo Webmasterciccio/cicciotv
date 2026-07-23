@@ -1,23 +1,16 @@
 # Configurazione Caddy per CiccioTV.
-# Caddy fa tre cose: HTTPS automatico (Let's Encrypt), password (Basic Auth)
-# davanti a tutto, e reverse proxy verso il backend FastAPI.
+# Caddy fa due cose: HTTPS automatico (Let's Encrypt) e reverse proxy verso il
+# backend FastAPI. Il LOGIN NON e' piu' qui: e' gestito dentro l'app (PIN), quindi
+# niente Basic Auth (avresti due login uno sopra l'altro).
 #
 # Sostituisci:
 #  - cicciotv.duckdns.org  con il tuo dominio DuckDNS (se diverso)
 #  - la mail in "tls"       con la tua (per gli avvisi Let's Encrypt)
-#  - l'hash della password  (generato con: caddy hash-password)
 #  - /home/ubuntu/cicciotv/frontend/dist  col percorso reale del sito buildato
 
 cicciotv.duckdns.org {
 	# Email per gli avvisi di scadenza certificato.
 	tls ciccio.a97@gmail.com
-
-	# Password d'accesso a tutto il sito e alle API.
-	# Genera l'hash con:  caddy hash-password
-	# poi incolla utente e hash qui sotto.
-	basic_auth {
-		ciccio SOSTITUISCI_CON_HASH_BCRYPT
-	}
 
 	# Le chiamate API del frontend vanno a /api/... : qui togliamo il prefisso
 	# "/api" e le giriamo al backend FastAPI in ascolto solo su localhost.

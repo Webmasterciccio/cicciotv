@@ -1,12 +1,24 @@
 import { Route, Routes } from 'react-router-dom'
 import Nav from './components/Nav.jsx'
 import Dashboard from './pages/Dashboard.jsx'
+import Login from './pages/Login.jsx'
 import Search from './pages/Search.jsx'
 import SeriesDetail from './pages/SeriesDetail.jsx'
 import Stats from './pages/Stats.jsx'
 import Settings from './pages/Settings.jsx'
+import { useAuth } from './auth.jsx'
 
 function App() {
+  const { user, loading } = useAuth()
+
+  if (loading) {
+    return <div className="app-splash">Caricamento…</div>
+  }
+
+  if (!user) {
+    return <Login />
+  }
+
   return (
     <>
       <Nav />

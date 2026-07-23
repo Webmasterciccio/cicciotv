@@ -1,10 +1,12 @@
 """Punto di avvio dell'applicazione FastAPI."""
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import inspect, text
 
+from . import auth
 from .database import Base, engine
-from .routers import series, settings, stats, tmdb
+from .routers import auth as auth_router
+from .routers import series, settings, stats, tmdb, users
 
 # Crea le tabelle nel database al primo avvio (se non esistono gia').
 Base.metadata.create_all(bind=engine)
@@ -49,9 +51,9 @@ app = FastAPI(
     version="0.1.0",
 )
 
-# App solo per uso personale, nessun dato sensibile/login: CORS aperto a
-# qualunque origine per evitare di dover indovinare l'esatta origine usata
-# dal WebView di Capacitor (che varia tra versioni/piattaforme).
+# CORS aperto a qualunque origine: l'autenticazione avviene via token nell'header
+# Authorization (non cookie), quindi non servono credenziali cross-origin. Cosi'
+# evitiamo di indovinare l'esatta origine del WebView di Capacitor.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -59,13 +61,19 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(series.router)
-app.include_router(tmdb.router)
-app.include_router(settings.router)
-app.include_router(stats.router)
+# L'autenticazione (login/logout) e' pubblica; tutto il resto richiede un token
+# valido, applicato una volta sola qui come dependency del router.
+protected = [Depends(auth.get_current_user)]
+
+app.include_router(auth_router.router)
+app.include_router(users.router)
+app.include_router(series.router, dependencies=protected)
+app.include_router(tmdb.router, dependencies=protected)
+app.include_router(settings.router, dependencies=protected)
+app.include_router(stats.router, dependencies=protected)
 
 
 @app.get("/", tags=["health"])
 def root():
-    """Endpoint di controllo: conferma che il server e' attivo."""
+    """Endpoint di controllo: conferma che il server e' attivo (nessun login)."""
     return {"app": "CiccioTV", "status": "ok", "docs": "/docs"}

@@ -1,10 +1,10 @@
-"""Endpoint REST per la gestione delle serie TV."""
+"""Endpoint REST per la gestione delle serie TV (per-utente)."""
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from .. import crud, schemas, tmdb_client
+from .. import auth, crud, models, schemas, tmdb_client
 from ..database import get_db
 from ..models import Status
 
@@ -12,9 +12,13 @@ router = APIRouter(prefix="/series", tags=["series"])
 
 
 @router.post("", response_model=schemas.SeriesRead, status_code=status.HTTP_201_CREATED)
-def create_series(payload: schemas.SeriesCreate, db: Session = Depends(get_db)):
-    """Aggiungi una nuova serie alla libreria."""
-    return crud.create_series(db, payload)
+def create_series(
+    payload: schemas.SeriesCreate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
+    """Aggiungi una nuova serie alla libreria dell'utente."""
+    return crud.create_series(db, payload, user_id=user.id)
 
 
 @router.get("", response_model=list[schemas.SeriesRead])
@@ -27,61 +31,74 @@ def list_series(
     skip: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
     db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
 ):
-    """Elenca le serie, opzionalmente filtrate per stato."""
-    return crud.list_series(db, status=status_filter, skip=skip, limit=limit)
+    """Elenca le serie dell'utente, opzionalmente filtrate per stato."""
+    return crud.list_series(db, user_id=user.id, status=status_filter, skip=skip, limit=limit)
 
 
-@router.get("/{series_id}", response_model=schemas.SeriesRead)
-def get_series(series_id: int, db: Session = Depends(get_db)):
-    """Dettaglio di una singola serie."""
-    series = crud.get_series(db, series_id)
+def _get_series_or_404(db: Session, series_id: int, user_id: int) -> models.Series:
+    series = crud.get_series(db, series_id, user_id)
     if series is None:
         raise HTTPException(status_code=404, detail="Serie non trovata")
     return series
+
+
+@router.get("/{series_id}", response_model=schemas.SeriesRead)
+def get_series(
+    series_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
+    """Dettaglio di una singola serie."""
+    return _get_series_or_404(db, series_id, user.id)
 
 
 @router.patch("/{series_id}", response_model=schemas.SeriesRead)
 def update_series(
-    series_id: int, payload: schemas.SeriesUpdate, db: Session = Depends(get_db)
+    series_id: int,
+    payload: schemas.SeriesUpdate,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
 ):
     """Aggiorna uno o piu' campi di una serie (stato, voto, episodio, ecc.)."""
-    series = crud.get_series(db, series_id)
-    if series is None:
-        raise HTTPException(status_code=404, detail="Serie non trovata")
+    series = _get_series_or_404(db, series_id, user.id)
     return crud.update_series(db, series, payload)
 
 
 @router.delete("/{series_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_series(series_id: int, db: Session = Depends(get_db)):
+def delete_series(
+    series_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
     """Rimuovi una serie dalla libreria."""
-    series = crud.get_series(db, series_id)
-    if series is None:
-        raise HTTPException(status_code=404, detail="Serie non trovata")
+    series = _get_series_or_404(db, series_id, user.id)
     crud.delete_series(db, series)
     return None
 
 
-def _get_series_or_404(db: Session, series_id: int):
-    series = crud.get_series(db, series_id)
-    if series is None:
-        raise HTTPException(status_code=404, detail="Serie non trovata")
-    return series
-
-
 @router.get("/{series_id}/watch-providers", response_model=schemas.WatchProviders)
-def watch_providers(series_id: int, db: Session = Depends(get_db)):
+def watch_providers(
+    series_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
     """Servizi su cui e' possibile guardare la serie (fonte: TMDB, regione IT)."""
-    series = _get_series_or_404(db, series_id)
+    series = _get_series_or_404(db, series_id, user.id)
     if series.tmdb_id is None:
         return schemas.WatchProviders()
     return tmdb_client.get_watch_providers(series.tmdb_id, media_type=series.media_type)
 
 
 @router.get("/{series_id}/tmdb", response_model=schemas.TmdbDetails)
-def tmdb_details(series_id: int, db: Session = Depends(get_db)):
+def tmdb_details(
+    series_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
     """Tutte le informazioni disponibili della serie su TMDB (trama, generi, cast, ...)."""
-    series = _get_series_or_404(db, series_id)
+    series = _get_series_or_404(db, series_id, user.id)
     if series.tmdb_id is None:
         return schemas.TmdbDetails()
     if series.media_type == "movie":
@@ -98,25 +115,37 @@ def tmdb_details(series_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{series_id}/recommendations", response_model=list[schemas.TmdbRecommendation])
-def recommendations(series_id: int, db: Session = Depends(get_db)):
+def recommendations(
+    series_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
     """Serie consigliate/simili a partire da questa (fonte: TMDB)."""
-    series = _get_series_or_404(db, series_id)
+    series = _get_series_or_404(db, series_id, user.id)
     if series.tmdb_id is None:
         return []
     return tmdb_client.get_recommendations(series.tmdb_id, media_type=series.media_type)
 
 
 @router.get("/{series_id}/episodes", response_model=list[schemas.EpisodeRead])
-def list_episodes(series_id: int, db: Session = Depends(get_db)):
+def list_episodes(
+    series_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
     """Elenca gli episodi di una serie con il loro stato di visione."""
-    _get_series_or_404(db, series_id)
+    _get_series_or_404(db, series_id, user.id)
     return crud.list_episodes(db, series_id)
 
 
 @router.post("/{series_id}/episodes/sync", response_model=list[schemas.EpisodeRead])
-def sync_episodes(series_id: int, db: Session = Depends(get_db)):
+def sync_episodes(
+    series_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
     """(Ri)scarica da TMDB l'elenco degli episodi di tutte le stagioni. Preserva quelli gia' segnati come visti."""
-    series = _get_series_or_404(db, series_id)
+    series = _get_series_or_404(db, series_id, user.id)
     if series.tmdb_id is None:
         raise HTTPException(
             status_code=400,
@@ -138,9 +167,10 @@ def update_episode(
     episode_id: int,
     payload: schemas.EpisodeWatchedUpdate,
     db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
 ):
     """Segna un singolo episodio come visto/non visto. Aggiorna automaticamente lo stato della serie."""
-    series = _get_series_or_404(db, series_id)
+    series = _get_series_or_404(db, series_id, user.id)
     episode = crud.get_episode(db, series_id, episode_id)
     if episode is None:
         raise HTTPException(status_code=404, detail="Episodio non trovato")
@@ -151,9 +181,14 @@ def update_episode(
     "/{series_id}/episodes/{episode_id}/watch-up-to",
     response_model=list[schemas.EpisodeRead],
 )
-def watch_up_to(series_id: int, episode_id: int, db: Session = Depends(get_db)):
+def watch_up_to(
+    series_id: int,
+    episode_id: int,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
     """Segna come visti tutti gli episodi fino a questo incluso (utile quando salti avanti)."""
-    series = _get_series_or_404(db, series_id)
+    series = _get_series_or_404(db, series_id, user.id)
     episode = crud.get_episode(db, series_id, episode_id)
     if episode is None:
         raise HTTPException(status_code=404, detail="Episodio non trovato")
@@ -166,7 +201,8 @@ def update_season(
     season_number: int,
     payload: schemas.EpisodeWatchedUpdate,
     db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
 ):
     """Segna tutti gli episodi di una stagione come visti/non visti in blocco."""
-    series = _get_series_or_404(db, series_id)
+    series = _get_series_or_404(db, series_id, user.id)
     return crud.set_season_watched(db, series, season_number, payload.watched)

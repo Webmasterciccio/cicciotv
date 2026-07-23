@@ -22,7 +22,10 @@ def setup(payload: schemas.UserCreate, db: Session = Depends(get_db)):
     if db.query(models.User.id).first() is not None:
         raise HTTPException(status_code=403, detail="Configurazione gia' completata")
     pin_hash, salt = auth.hash_pin(payload.pin.strip())
-    user = models.User(name=payload.name.strip(), pin_hash=pin_hash, pin_salt=salt)
+    # Il primo utente e' l'amministratore: potra' creare gli altri.
+    user = models.User(
+        name=payload.name.strip(), pin_hash=pin_hash, pin_salt=salt, is_admin=True
+    )
     db.add(user)
     db.commit()
     db.refresh(user)

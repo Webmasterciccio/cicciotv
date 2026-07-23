@@ -145,7 +145,9 @@ Deve restituire il messaggio di stato del server. Log: `journalctl -u cicciotv -
 Il login usa un **PIN**, ma **non serve creare nulla da terminale**: al primo
 accesso da browser/app, se non esiste ancora nessun utente, appare un form
 "Primo avvio: crea il tuo accesso" (nome + PIN) che ti registra e ti fa entrare
-subito. Gli altri utenti si aggiungono poi dall'app (Impostazioni → Utenti).
+subito. Questo **primo utente è l'amministratore**: è l'unico che può creare
+altri utenti (dall'app, Impostazioni → Utenti). Ogni utente ha la **sua libreria**
+separata (serie, film, statistiche, preferenze).
 
 > In alternativa, se preferisci crearlo da riga di comando:
 > `cd ~/cicciotv && .venv/bin/python -m app.create_user`

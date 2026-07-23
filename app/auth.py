@@ -120,3 +120,10 @@ def get_current_user(
     if user is None:
         raise HTTPException(status_code=401, detail="Utente inesistente")
     return user
+
+
+def require_admin(user: models.User = Depends(get_current_user)) -> models.User:
+    """Come get_current_user, ma consente solo agli amministratori."""
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="Riservato all'amministratore")
+    return user

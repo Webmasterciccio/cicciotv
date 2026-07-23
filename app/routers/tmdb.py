@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from .. import crud, schemas, tmdb_client
+from .. import auth, crud, models, schemas, tmdb_client
 from ..database import get_db
 from ..models import Status
 
@@ -29,14 +29,15 @@ def suggestions(
     limit: int = Query(default=20, ge=1, le=40),
     type: str = MediaType,
     db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
 ):
     """Consigli sul prossimo titolo da guardare, in base ai generi preferiti
     (per tipo) e ai titoli non ancora in libreria."""
-    preferred = crud.get_preferred_genres(db, media_type=type)
+    preferred = crud.get_preferred_genres(db, user.id, media_type=type)
     if not preferred:
         return []
 
-    already = crud.get_library_tmdb_ids(db, media_type=type)
+    already = crud.get_library_tmdb_ids(db, user.id, media_type=type)
     picked: list[dict] = []
     seen: set[int] = set()
     # Scorre qualche pagina di risultati finche' non raggiunge il numero voluto.
@@ -62,9 +63,10 @@ def import_series(
     series_status: Status = Query(default=Status.da_vedere, alias="status"),
     type: str = MediaType,
     db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
 ):
-    """Importa una serie o un film da TMDB nella libreria locale."""
-    existing = crud.get_series_by_tmdb_id(db, tmdb_id, media_type=type)
+    """Importa una serie o un film da TMDB nella libreria dell'utente."""
+    existing = crud.get_series_by_tmdb_id(db, tmdb_id, user.id, media_type=type)
     if existing is not None:
         label = "Film" if type == "movie" else "Serie"
         raise HTTPException(
@@ -83,7 +85,7 @@ def import_series(
             poster_url=details["poster_url"],
             genres=",".join(details.get("genres") or []) or None,
         )
-        return crud.create_series(db, payload)
+        return crud.create_series(db, payload, user_id=user.id)
 
     details = tmdb_client.get_tv_details(tmdb_id)
     payload = schemas.SeriesCreate(
@@ -95,7 +97,7 @@ def import_series(
         poster_url=details["poster_url"],
         genres=",".join(details.get("genres") or []) or None,
     )
-    series = crud.create_series(db, payload)
+    series = crud.create_series(db, payload, user_id=user.id)
 
     if series.total_seasons:
         all_episodes = []

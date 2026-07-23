@@ -18,14 +18,21 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def get_series(db: Session, series_id: int) -> Optional[models.Series]:
-    return db.get(models.Series, series_id)
+def get_series(db: Session, series_id: int, user_id: int) -> Optional[models.Series]:
+    """Ritorna la serie solo se appartiene all'utente (altrimenti None)."""
+    return (
+        db.query(models.Series)
+        .filter(models.Series.id == series_id, models.Series.user_id == user_id)
+        .first()
+    )
 
 
 def get_series_by_tmdb_id(
-    db: Session, tmdb_id: int, media_type: Optional[str] = None
+    db: Session, tmdb_id: int, user_id: int, media_type: Optional[str] = None
 ) -> Optional[models.Series]:
-    query = db.query(models.Series).filter(models.Series.tmdb_id == tmdb_id)
+    query = db.query(models.Series).filter(
+        models.Series.tmdb_id == tmdb_id, models.Series.user_id == user_id
+    )
     if media_type is not None:
         query = query.filter(models.Series.media_type == media_type)
     return query.first()
@@ -33,11 +40,12 @@ def get_series_by_tmdb_id(
 
 def list_series(
     db: Session,
+    user_id: int,
     status: Optional[Status] = None,
     skip: int = 0,
     limit: int = 100,
 ) -> list[models.Series]:
-    query = db.query(models.Series)
+    query = db.query(models.Series).filter(models.Series.user_id == user_id)
     if status is not None:
         query = query.filter(models.Series.status == status)
     return (
@@ -48,8 +56,8 @@ def list_series(
     )
 
 
-def create_series(db: Session, data: schemas.SeriesCreate) -> models.Series:
-    series = models.Series(**data.model_dump())
+def create_series(db: Session, data: schemas.SeriesCreate, user_id: int) -> models.Series:
+    series = models.Series(**data.model_dump(), user_id=user_id)
     _sync_watch_dates(series, previous_status=None)
     db.add(series)
     db.commit()
@@ -185,23 +193,23 @@ def set_watched_up_to(
 # --- Impostazioni ---
 
 
-def get_setting(db: Session, key: str) -> Optional[str]:
-    setting = db.get(models.Setting, key)
+def get_user_setting(db: Session, user_id: int, key: str) -> Optional[str]:
+    setting = db.get(models.UserSetting, (user_id, key))
     return setting.value if setting else None
 
 
-def set_setting(db: Session, key: str, value: Optional[str]) -> None:
-    setting = db.get(models.Setting, key)
+def set_user_setting(db: Session, user_id: int, key: str, value: Optional[str]) -> None:
+    setting = db.get(models.UserSetting, (user_id, key))
     if setting is None:
-        setting = models.Setting(key=key, value=value)
+        setting = models.UserSetting(user_id=user_id, key=key, value=value)
         db.add(setting)
     else:
         setting.value = value
     db.commit()
 
 
-def get_preferred_genres(db: Session, media_type: str = "tv") -> list[int]:
-    raw = get_setting(db, _preferred_genres_key(media_type))
+def get_preferred_genres(db: Session, user_id: int, media_type: str = "tv") -> list[int]:
+    raw = get_user_setting(db, user_id, _preferred_genres_key(media_type))
     if not raw:
         return []
     try:
@@ -211,14 +219,20 @@ def get_preferred_genres(db: Session, media_type: str = "tv") -> list[int]:
         return []
 
 
-def set_preferred_genres(db: Session, media_type: str, genre_ids: list[int]) -> list[int]:
+def set_preferred_genres(
+    db: Session, user_id: int, media_type: str, genre_ids: list[int]
+) -> list[int]:
     cleaned = [int(x) for x in genre_ids]
-    set_setting(db, _preferred_genres_key(media_type), json.dumps(cleaned))
+    set_user_setting(db, user_id, _preferred_genres_key(media_type), json.dumps(cleaned))
     return cleaned
 
 
-def get_library_tmdb_ids(db: Session, media_type: Optional[str] = None) -> set[int]:
-    query = db.query(models.Series.tmdb_id).filter(models.Series.tmdb_id.isnot(None))
+def get_library_tmdb_ids(
+    db: Session, user_id: int, media_type: Optional[str] = None
+) -> set[int]:
+    query = db.query(models.Series.tmdb_id).filter(
+        models.Series.tmdb_id.isnot(None), models.Series.user_id == user_id
+    )
     if media_type is not None:
         query = query.filter(models.Series.media_type == media_type)
     return {r[0] for r in query.all()}
@@ -354,12 +368,17 @@ def _watch_insights(tv_series: list, episodes: list) -> tuple[list[str], list[di
     return insights, weekday_data
 
 
-def compute_stats(db: Session) -> dict:
-    """Calcola le statistiche della libreria a partire dai dati locali."""
-    all_media = db.query(models.Series).all()
+def compute_stats(db: Session, user_id: int) -> dict:
+    """Calcola le statistiche della libreria dell'utente a partire dai dati locali."""
+    all_media = db.query(models.Series).filter(models.Series.user_id == user_id).all()
     series = [s for s in all_media if s.media_type != "movie"]
     movies = [s for s in all_media if s.media_type == "movie"]
-    episodes = db.query(models.Episode).all()
+    episodes = (
+        db.query(models.Episode)
+        .join(models.Series, models.Episode.series_id == models.Series.id)
+        .filter(models.Series.user_id == user_id)
+        .all()
+    )
 
     watched = [e for e in episodes if e.watched]
     ratings = [s.rating for s in series if s.rating is not None]

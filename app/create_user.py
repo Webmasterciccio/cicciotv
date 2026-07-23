@@ -39,8 +39,14 @@ def main() -> None:
             existing.pin_hash, existing.pin_salt = pin_hash, salt
             action = "aggiornato"
         else:
-            db.add(models.User(name=name, pin_hash=pin_hash, pin_salt=salt))
-            action = "creato"
+            # Il primo utente in assoluto e' l'amministratore.
+            is_admin = db.query(models.User).count() == 0
+            db.add(
+                models.User(
+                    name=name, pin_hash=pin_hash, pin_salt=salt, is_admin=is_admin
+                )
+            )
+            action = "creato (amministratore)" if is_admin else "creato"
         db.commit()
         print(f"Utente '{name}' {action}. Ora puoi accedere con il PIN.")
     finally:

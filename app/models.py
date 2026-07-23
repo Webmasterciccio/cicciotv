@@ -35,6 +35,10 @@ class Series(Base):
 
     id = Column(Integer, primary_key=True, index=True)
 
+    # Proprietario: ogni utente ha la sua libreria. Nullable per la migrazione
+    # (le serie preesistenti vengono assegnate all'admin all'avvio).
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
     # Tipo di media: "tv" (serie) o "movie" (film)
     media_type = Column(String, nullable=False, default="tv", index=True)
 
@@ -68,10 +72,23 @@ class Series(Base):
 
 
 class Setting(Base):
-    """Impostazioni dell'app in formato chiave-valore (es. generi preferiti)."""
+    """Vecchie impostazioni globali chiave-valore (pre multi-utente).
+
+    Mantenuta solo per la migrazione: i valori vengono copiati in UserSetting
+    per l'admin al primo avvio. Le nuove preferenze usano UserSetting."""
 
     __tablename__ = "settings"
 
+    key = Column(String, primary_key=True)
+    value = Column(Text, nullable=True)
+
+
+class UserSetting(Base):
+    """Impostazioni per-utente (es. generi preferiti), chiave-valore per utente."""
+
+    __tablename__ = "user_settings"
+
+    user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
     key = Column(String, primary_key=True)
     value = Column(Text, nullable=True)
 
@@ -86,6 +103,8 @@ class User(Base):
     # Il PIN non e' mai salvato in chiaro: solo hash PBKDF2 + sale casuale.
     pin_hash = Column(String, nullable=False)
     pin_salt = Column(String, nullable=False)
+    # Solo l'admin puo' creare/gestire altri utenti. Il primo utente e' admin.
+    is_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=_now)
 
 

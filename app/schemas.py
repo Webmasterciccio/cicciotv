@@ -203,6 +203,7 @@ class UserRead(BaseModel):
 
     id: int
     name: str
+    is_admin: bool = False
 
 
 class LoginResponse(BaseModel):

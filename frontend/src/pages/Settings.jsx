@@ -119,6 +119,7 @@ function UsersSection() {
 }
 
 function Settings() {
+  const { user } = useAuth()
   const [mediaType, setMediaType] = useState('tv')
   const [genresByType, setGenresByType] = useState({}) // { tv: [...], movie: [...] }
   const [selected, setSelected] = useState({ tv: new Set(), movie: new Set() })
@@ -229,7 +230,7 @@ function Settings() {
         </p>
       </section>
 
-      <UsersSection />
+      {user?.is_admin && <UsersSection />}
     </div>
   )
 }

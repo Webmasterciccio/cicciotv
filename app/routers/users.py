@@ -5,11 +5,11 @@ from sqlalchemy.orm import Session
 from .. import auth, models, schemas
 from ..database import get_db
 
-# Tutti gli endpoint richiedono di essere gia' autenticati.
+# Solo l'amministratore puo' elencare/creare/modificare/eliminare utenti.
 router = APIRouter(
     prefix="/users",
     tags=["users"],
-    dependencies=[Depends(auth.get_current_user)],
+    dependencies=[Depends(auth.require_admin)],
 )
 
 

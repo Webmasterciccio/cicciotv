@@ -1,0 +1,24 @@
+# Servizio systemd per il backend FastAPI di CiccioTV.
+# Copia questo file in /etc/systemd/system/cicciotv.service e adatta i percorsi
+# se hai clonato il progetto in una cartella diversa da /home/ubuntu/cicciotv.
+#
+#   sudo cp deploy/cicciotv.service /etc/systemd/system/cicciotv.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now cicciotv
+#
+# Log in tempo reale:  journalctl -u cicciotv -f
+
+[Unit]
+Description=CiccioTV backend (FastAPI/uvicorn)
+After=network.target
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/cicciotv
+# Ascolta SOLO su localhost: l'accesso da fuori passa esclusivamente da Caddy.
+ExecStart=/home/ubuntu/cicciotv/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

@@ -1,15 +1,24 @@
 // Nell'app Android "127.0.0.1" e' il telefono stesso, non il PC: va usato
 // l'indirizzo LAN del PC (vedi frontend/.env). Nel browser desktop il default
-// resta localhost.
+// resta localhost. In produzione (dietro Caddy sullo stesso dominio) si usa il
+// percorso relativo "/api" cosi' il browser riusa da solo la password Basic Auth.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+
+// Solo per la build dell'app Android: il WebView parla col dominio da un'origine
+// diversa, quindi la password va mandata a mano nell'header Authorization. Nel
+// browser questi restano vuoti e la Basic Auth la gestisce direttamente il browser.
+const API_USER = import.meta.env.VITE_API_USER
+const API_PASS = import.meta.env.VITE_API_PASS
+const AUTH_HEADER =
+  API_USER ? { Authorization: `Basic ${btoa(`${API_USER}:${API_PASS ?? ''}`)}` } : {}
 
 async function request(path, options = {}) {
   const url = `${API_BASE_URL}${path}`
   let response
   try {
     response = await fetch(url, {
-      headers: { 'Content-Type': 'application/json' },
       ...options,
+      headers: { 'Content-Type': 'application/json', ...AUTH_HEADER, ...options.headers },
     })
   } catch (err) {
     // Un fetch() fallito a livello di rete (DNS, connessione rifiutata, CORS,

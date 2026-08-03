@@ -1,10 +1,11 @@
 // Metadati per tipo di media: etichette, verbi e comportamenti UI in un unico
 // posto, cosi' le pagine (Cerca, Libreria, Dettaglio, Consigli) restano uniformi.
 
+// L'anime non e' una sezione a se': confluisce in "Serie TV" (con fallback su
+// AniList in ricerca quando TMDB non ha il titolo).
 export const MEDIA_TYPES = [
   { type: 'tv', label: 'Serie TV', hasGenres: true },
   { type: 'movie', label: 'Film', hasGenres: true },
-  { type: 'anime', label: 'Anime', hasGenres: true },
   { type: 'manga', label: 'Manga', hasGenres: true },
   { type: 'book', label: 'Libri', hasGenres: false },
   { type: 'comic', label: 'Fumetti', hasGenres: false },
@@ -14,8 +15,7 @@ export const MEDIA_TYPES = [
 const SOURCE = {
   tv: 'tmdb',
   movie: 'tmdb',
-  anime: 'jikan',
-  manga: 'jikan',
+  manga: 'anilist',
   book: 'googlebooks',
   comic: 'comicvine',
 }
@@ -27,7 +27,7 @@ export const isRead = (type) => READ.has(type)
 export const verb = (type) => (isRead(type) ? 'letto' : 'visto')
 
 // Tipi con lista di unita' tracciate una a una (tabella Episode): episodi/numeri.
-const UNIT_LIST = new Set(['tv', 'anime', 'comic'])
+const UNIT_LIST = new Set(['tv', 'comic'])
 export const hasUnitList = (type) => UNIT_LIST.has(type)
 
 // Tipi con progresso numerico (manga: capitoli, libri: pagine).
@@ -38,7 +38,6 @@ export const hasProgress = (type) => PROGRESS.has(type)
 export function unitLabel(type, plural = true) {
   const map = {
     tv: ['episodio', 'episodi'],
-    anime: ['episodio', 'episodi'],
     comic: ['numero', 'numeri'],
     manga: ['capitolo', 'capitoli'],
     book: ['pagina', 'pagine'],
@@ -75,9 +74,8 @@ export function labelOf(type) {
 
 export function searchPlaceholder(type) {
   const map = {
-    tv: 'Cerca una serie TV…',
+    tv: 'Cerca una serie TV o un anime…',
     movie: 'Cerca un film…',
-    anime: 'Cerca un anime…',
     manga: 'Cerca un manga…',
     book: 'Cerca un libro…',
     comic: 'Cerca un fumetto…',
@@ -89,7 +87,6 @@ export function suggestionsTitle(type) {
   const map = {
     tv: 'Serie consigliate per te',
     movie: 'Film consigliati per te',
-    anime: 'Anime consigliati per te',
     manga: 'Manga consigliati per te',
     book: 'Libri consigliati per te',
     comic: 'Fumetti consigliati per te',

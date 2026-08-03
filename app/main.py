@@ -126,9 +126,25 @@ def _migrate_sources() -> None:
         )
 
 
+def _migrate_anime_into_tv() -> None:
+    """L'anime non e' piu' una sezione separata: confluisce in "tv" (con
+    fallback su AniList in ricerca quando TMDB non ha il titolo). Le righe
+    preesistenti con media_type='anime' diventano 'tv', mantenendo la
+    sorgente originale (jikan/tmdb). Idempotente."""
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "series" not in tables:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE series SET media_type='tv' WHERE media_type='anime'"))
+        if "dismissals" in tables:
+            conn.execute(text("UPDATE dismissals SET media_type='tv' WHERE media_type='anime'"))
+
+
 _add_missing_columns()
 _migrate_multiuser()
 _migrate_sources()
+_migrate_anime_into_tv()
 
 app = FastAPI(
     title="CiccioTV",

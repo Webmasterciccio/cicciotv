@@ -3,40 +3,58 @@ normalizza le risposte in un formato comune ("card") usato da ricerca, consigli
 e importazione.
 
 Sorgenti:
-- tv, movie   -> TMDB (tmdb_client)
-- anime, manga-> Jikan (jikan_client)
-- book        -> Google Books (googlebooks_client)
-- comic       -> Comic Vine (comicvine_client)
+- tv, movie -> TMDB (tmdb_client). L'anime NON e' una sezione separata: e'
+  incorporato in "tv". Se TMDB non trova il titolo cercato, la ricerca ripiega
+  su AniList (stesso media_type "tv", source "anilist").
+- manga     -> AniList (anilist_client)
+- book      -> Google Books (googlebooks_client)
+- comic     -> Comic Vine (comicvine_client)
+
+Le sorgenti "anilist"/"jikan" parlano di "anime" internamente: quando servono
+per un titolo "tv" (fallback, o righe preesistenti dell'ex sezione anime) si
+traduce il tipo prima di chiamare il client e lo si riporta a "tv" nel
+risultato, cosi' il resto dell'app vede sempre e solo "tv".
 """
 from typing import Any, Optional
 
 from fastapi import HTTPException
 
-from . import comicvine_client, googlebooks_client, jikan_client, schemas, tmdb_client
+from . import anilist_client, comicvine_client, googlebooks_client, jikan_client, schemas, tmdb_client
 
 # Tipi che tracciano singole "unita'" (episodi/numeri) nella tabella Episode.
-UNIT_TYPES = {"tv", "anime", "comic"}
-# Etichette leggibili delle sorgenti (per messaggi/preferenze).
-MEDIA_TYPES = ("tv", "movie", "anime", "manga", "book", "comic")
+UNIT_TYPES = {"tv", "comic"}
+# Tipi di media gestiti dal catalogo (l'anime confluisce in "tv").
+MEDIA_TYPES = ("tv", "movie", "manga", "book", "comic")
+
+# Sorgenti "stile anime" (episodi in lista piatta, no stagioni), usate anche
+# per media_type "tv" quando il titolo non e' su TMDB.
+_ANIME_LIKE_SOURCES = {"anilist", "jikan"}
 
 
 def source_for(media_type: str) -> str:
     return {
         "tv": "tmdb",
         "movie": "tmdb",
-        "anime": "jikan",
-        "manga": "jikan",
+        "manga": "anilist",
         "book": "googlebooks",
         "comic": "comicvine",
     }.get(media_type, "tmdb")
 
 
-def _card(item: dict, media_type: Optional[str] = None) -> dict[str, Any]:
+def _client_type(media_type: str, source: str) -> str:
+    """Tipo da passare ai client Jikan/AniList: 'tv' diventa 'anime' quando la
+    sorgente e' anime-like; 'manga' resta 'manga'."""
+    if media_type == "tv" and source in _ANIME_LIKE_SOURCES:
+        return "anime"
+    return media_type
+
+
+def _card(item: dict, media_type: str) -> dict[str, Any]:
     """Normalizza un risultato (ricerca/consiglio) nel formato comune."""
     return {
         "source": item.get("source"),
         "external_id": item.get("external_id"),
-        "media_type": item.get("media_type") or media_type,
+        "media_type": media_type,
         "title": item.get("title"),
         "poster_url": item.get("poster_url"),
         "overview": item.get("overview"),
@@ -71,14 +89,21 @@ def _tmdb_card(item: dict, media_type: str) -> dict[str, Any]:
 # --- Ricerca ---
 
 def search(query: str, media_type: str) -> list[dict[str, Any]]:
-    if media_type in ("tv", "movie"):
+    if media_type == "movie":
         return [_tmdb_card(it, media_type) for it in tmdb_client.search(query, media_type)]
-    if media_type in ("anime", "manga"):
-        return [_card(it) for it in jikan_client.search(query, media_type)]
+    if media_type == "tv":
+        results = [_tmdb_card(it, "tv") for it in tmdb_client.search(query, "tv")]
+        if not results:
+            # Titolo non trovato su TMDB (tipico di anime recenti/di nicchia):
+            # ripiega su AniList, restituendo comunque media_type "tv".
+            results = [_card(it, "tv") for it in anilist_client.search(query, "anime")]
+        return results
+    if media_type == "manga":
+        return [_card(it, "manga") for it in anilist_client.search(query, "manga")]
     if media_type == "book":
-        return [_card(it) for it in googlebooks_client.search(query, media_type)]
+        return [_card(it, "book") for it in googlebooks_client.search(query, media_type)]
     if media_type == "comic":
-        return [_card(it) for it in comicvine_client.search(query, media_type)]
+        return [_card(it, "comic") for it in comicvine_client.search(query, media_type)]
     raise HTTPException(status_code=400, detail=f"Tipo non valido: {media_type}")
 
 
@@ -110,8 +135,16 @@ def get_details(media_type: str, source: str, external_id: str) -> dict[str, Any
         merged = {**_DETAILS_DEFAULTS, "source": "tmdb", "external_id": external_id, **details}
         merged["media_type"] = media_type
         return merged
+    if source == "anilist":
+        details = anilist_client.get_details(_client_type(media_type, source), external_id)
+        if details:
+            details["media_type"] = media_type
+        return details
     if source == "jikan":
-        return jikan_client.get_details(media_type, external_id)
+        details = jikan_client.get_details(_client_type(media_type, source), external_id)
+        if details:
+            details["media_type"] = media_type
+        return details
     if source == "googlebooks":
         return googlebooks_client.get_details(media_type, external_id)
     if source == "comicvine":
@@ -125,10 +158,13 @@ def has_units(media_type: str) -> bool:
     return media_type in UNIT_TYPES
 
 
-def get_units(media_type: str, external_id: str) -> list[dict[str, Any]]:
-    """Episodi (anime) o numeri (fumetti). Le serie TV usano il percorso TMDB
-    dedicato (stagioni) nel router; qui gestiamo anime e fumetti."""
-    if media_type == "anime":
+def get_units(media_type: str, source: str, external_id: str) -> list[dict[str, Any]]:
+    """Episodi (serie TV non-TMDB, ex sezione anime) o numeri (fumetti). Le
+    serie TV da TMDB usano il percorso dedicato (stagioni) nel router; qui
+    gestiamo tv via AniList/Jikan e i fumetti via Comic Vine."""
+    if media_type == "tv" and source == "anilist":
+        return anilist_client.get_episodes(external_id)
+    if media_type == "tv" and source == "jikan":
         return jikan_client.get_episodes(external_id)
     if media_type == "comic":
         return comicvine_client.get_issues(external_id)
@@ -143,12 +179,18 @@ def get_recommendations(media_type: str, source: str, external_id: str) -> list[
             return []
         recs = tmdb_client.get_recommendations(int(external_id), media_type)
         return [_tmdb_card(it, media_type) for it in recs]
+    if source == "anilist":
+        recs = anilist_client.get_recommendations(_client_type(media_type, source), external_id)
+        return [_card(it, media_type) for it in recs]
     if source == "jikan":
-        return [_card(it) for it in jikan_client.get_recommendations(media_type, external_id)]
+        recs = jikan_client.get_recommendations(_client_type(media_type, source), external_id)
+        return [_card(it, media_type) for it in recs]
     if source == "googlebooks":
-        return [_card(it) for it in googlebooks_client.get_recommendations(media_type, external_id)]
+        recs = googlebooks_client.get_recommendations(media_type, external_id)
+        return [_card(it, media_type) for it in recs]
     if source == "comicvine":
-        return [_card(it) for it in comicvine_client.get_recommendations(media_type, external_id)]
+        recs = comicvine_client.get_recommendations(media_type, external_id)
+        return [_card(it, media_type) for it in recs]
     return []
 
 
@@ -162,8 +204,8 @@ def get_watch_providers(media_type: str, source: str, external_id: str) -> dict[
 def get_genres(media_type: str) -> list[dict[str, Any]]:
     if media_type in ("tv", "movie"):
         return tmdb_client.get_genres(media_type)
-    if media_type in ("anime", "manga"):
-        return jikan_client.get_genres(media_type)
+    if media_type == "manga":
+        return anilist_client.get_genres("manga")
     return []  # libri/fumetti: nessuna preferenza di genere
 
 
@@ -182,8 +224,9 @@ def discover(
             min_rating=min_rating, year_from=year_from, lang=lang,
         )
         return [_tmdb_card(it, media_type) for it in items]
-    if media_type in ("anime", "manga"):
-        return [_card(it) for it in jikan_client.discover_by_genres(genre_ids, media_type, page)]
+    if media_type == "manga":
+        items = anilist_client.discover_by_genres(genre_ids, "manga", page)
+        return [_card(it, "manga") for it in items]
     return []
 
 
@@ -191,12 +234,12 @@ def get_popular(media_type: str, page: int = 1) -> list[dict[str, Any]]:
     if media_type in ("tv", "movie"):
         return [_tmdb_card(it, media_type) for it in tmdb_client.discover_by_genres(
             [], media_type, page=page)] or []
-    if media_type in ("anime", "manga"):
-        return [_card(it) for it in jikan_client.get_popular(media_type, page)]
+    if media_type == "manga":
+        return [_card(it, "manga") for it in anilist_client.get_popular("manga", page)]
     if media_type == "book":
-        return [_card(it) for it in googlebooks_client.get_popular(media_type, page)]
+        return [_card(it, "book") for it in googlebooks_client.get_popular(media_type, page)]
     if media_type == "comic":
-        return [_card(it) for it in comicvine_client.get_popular(media_type, page)]
+        return [_card(it, "comic") for it in comicvine_client.get_popular(media_type, page)]
     return []
 
 
@@ -217,11 +260,11 @@ def build_import(media_type: str, source: str, external_id: str) -> tuple[schema
         progress_total = details.get("chapters")
     elif media_type == "book":
         progress_total = details.get("page_count")
-    elif media_type == "anime":
-        progress_total = details.get("number_of_episodes")
     elif media_type == "comic":
         progress_total = details.get("number_of_episodes")
     else:
+        # "tv" (anime non su TMDB): il progresso e' tracciato episodio per
+        # episodio nella tabella Episode, non come contatore numerico.
         progress_total = None
 
     payload = schemas.SeriesCreate(
@@ -233,7 +276,7 @@ def build_import(media_type: str, source: str, external_id: str) -> tuple[schema
         genres=genres,
         progress_total=progress_total,
     )
-    units = get_units(media_type, external_id) if has_units(media_type) else []
+    units = get_units(media_type, source, external_id) if has_units(media_type) else []
     return payload, units
 
 

@@ -6,6 +6,7 @@ Fornisce un GET JSON con:
 - un throttle opzionale per-servizio (intervallo minimo tra due chiamate);
 - gestione uniforme degli errori come HTTPException (come tmdb_client).
 """
+import re
 import threading
 import time
 from typing import Any, Optional
@@ -14,6 +15,7 @@ import httpx
 from fastapi import HTTPException
 
 DEFAULT_TTL = 600  # 10 minuti: i cataloghi esterni cambiano di rado
+_TAG_RE = re.compile(r"<[^>]+>")
 
 # Cache: chiave -> (scadenza_epoch, dati). Protetta da lock perche' gli endpoint
 # sync di FastAPI girano su un threadpool.
@@ -128,3 +130,71 @@ def get_json(
     data = response.json()
     _cache_set(key, data, ttl)
     return data
+
+
+def post_json(
+    url: str,
+    json_body: dict,
+    headers: Optional[dict] = None,
+    *,
+    service: str = "API esterna",
+    timeout: float = 15.0,
+    ttl: int = DEFAULT_TTL,
+    min_interval: float = 0.0,
+    retries: int = 1,
+) -> dict[str, Any]:
+    """POST JSON con cache/throttle/retry (per API GraphQL come AniList)."""
+    key = _key(url, json_body, headers)
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    response = None
+    for attempt in range(retries + 1):
+        _throttle(service, min_interval)
+        try:
+            response = httpx.post(url, json=json_body, headers=headers, timeout=timeout)
+        except httpx.RequestError as exc:
+            if attempt < retries:
+                time.sleep(0.6 * (attempt + 1))
+                continue
+            raise HTTPException(
+                status_code=502, detail=f"Impossibile contattare {service}: {exc}"
+            ) from exc
+
+        if response.status_code >= 500 and attempt < retries:
+            time.sleep(0.6 * (attempt + 1))
+            continue
+        break
+
+    if response.status_code == 429:
+        raise HTTPException(
+            status_code=503,
+            detail=f"{service} ha applicato un limite di richieste. Riprova tra poco.",
+        )
+    if response.status_code >= 400:
+        raise HTTPException(
+            status_code=503 if response.status_code >= 500 else 502,
+            detail=f"{service} non risponde correttamente ({response.status_code}).",
+        )
+
+    data = response.json()
+    if data.get("errors"):
+        # GraphQL puo' rispondere 200 con un elenco di errori nel corpo.
+        first = data["errors"][0].get("message", "errore sconosciuto")
+        raise HTTPException(status_code=502, detail=f"Errore {service}: {first}")
+
+    _cache_set(key, data, ttl)
+    return data
+
+
+def strip_html(value: Optional[str]) -> Optional[str]:
+    """Rimuove tag HTML semplici (<br>, <i>, ...) da un testo, per le
+    descrizioni di API che li includono anche quando richiesto testo puro."""
+    if not value:
+        return None
+    import html
+
+    text = html.unescape(_TAG_RE.sub(" ", value))
+    text = re.sub(r"\s+", " ", text).strip()
+    return text or None

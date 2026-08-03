@@ -222,21 +222,21 @@ function SeriesDetail() {
   const isMovie = type === 'movie'
   const labels = statusLabels(type)
   const statusOptions = isMovie ? { da_vedere: labels.da_vedere, vista: labels.vista } : labels
-  const showUnits = hasUnitList(type) // tv/anime/comic → lista episodi/numeri
+  const showUnits = hasUnitList(type) // tv/comic → lista episodi/numeri
   const showProgress = hasProgress(type) // manga/libri → progresso numerico
   const unitsTitle = type === 'comic' ? 'Numeri' : 'Episodi'
 
-  // Etichetta del titolo di credito, diversa per sorgente.
-  const creditLabel = { tv: 'Creata da', movie: 'Regia di', anime: 'Studio', manga: 'Autore', book: 'Autore', comic: 'Editore' }[type]
+  // Etichetta del titolo di credito, diversa per sorgente. Per "tv" copre sia
+  // le serie TMDB (creata da) sia gli anime da AniList/Jikan (d.created_by
+  // contiene lo studio in quel caso).
+  const creditLabel = { tv: 'Creata da', movie: 'Regia di', manga: 'Autore', book: 'Autore', comic: 'Editore' }[type]
   const credit =
-    type === 'anime'
-      ? d.studio
-      : type === 'comic'
-        ? d.publisher
-        : (d.authors?.length ? d.authors.join(', ') : (d.created_by || []).join(', '))
+    type === 'comic'
+      ? d.publisher
+      : (d.authors?.length ? d.authors.join(', ') : (d.created_by || []).join(', '))
 
   // Riga di metadati compatta (solo le voci disponibili).
-  const typeBadge = { movie: 'Film', anime: 'Anime', manga: 'Manga', book: 'Libro', comic: 'Fumetto' }[type]
+  const typeBadge = { movie: 'Film', manga: 'Manga', book: 'Libro', comic: 'Fumetto' }[type]
   const metaItems = []
   if (typeBadge) metaItems.push(typeBadge)
   const startYear = yearOf(d.first_air_date)

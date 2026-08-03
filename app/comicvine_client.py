@@ -4,20 +4,18 @@ Richiede una API key gratuita (config.COMICVINE_API_KEY) e uno User-Agent non
 vuoto (Comic Vine blocca gli user-agent generici). E' rate-limited
 (~200 richieste/risorsa/ora): ci affidiamo alla cache TTL di http_util.
 """
-import html
-import re
 from typing import Any, Optional
 
 from fastapi import HTTPException
 
 from . import config, http_util
+from .http_util import strip_html as _strip_html
 
 BASE_URL = "https://comicvine.gamespot.com/api"
 SERVICE = "Comic Vine"
 _HEADERS = {"User-Agent": "CiccioTV/1.0"}
 # Prefisso del tipo-risorsa "volume" negli id Comic Vine (una serie a fumetti).
 _VOLUME_PREFIX = "4050-"
-_TAG_RE = re.compile(r"<[^>]+>")
 
 
 def _require_key() -> str:
@@ -43,13 +41,6 @@ def _get(path: str, extra: dict, *, not_found_ok: bool = False) -> Optional[dict
         timeout=25.0,  # Comic Vine e' spesso lento, specie sull'elenco dei numeri
         not_found_ok=not_found_ok,
     )
-
-
-def _strip_html(value: Optional[str]) -> Optional[str]:
-    if not value:
-        return None
-    text = html.unescape(_TAG_RE.sub("", value)).strip()
-    return text or None
 
 
 def _poster(item: dict) -> Optional[str]:

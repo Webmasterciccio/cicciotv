@@ -143,15 +143,17 @@ def sync_episodes(
     db: Session = Depends(get_db),
     user: models.User = Depends(auth.get_current_user),
 ):
-    """(Ri)scarica le unita' del titolo (episodi anime, numeri fumetti, o episodi
-    per stagione delle serie TV). Preserva quelle gia' segnate come viste."""
+    """(Ri)scarica le unita' del titolo: episodi (serie TV, anche da AniList/
+    Jikan quando il titolo non e' su TMDB) o numeri (fumetti). Preserva quelle
+    gia' segnate come viste."""
     series = _get_series_or_404(db, series_id, user.id)
 
-    # Anime (Jikan) e fumetti (Comic Vine): lista piatta di unita' dal dispatcher.
-    if series.media_type in ("anime", "comic"):
+    # Fumetti (Comic Vine) o serie TV non-TMDB (AniList/Jikan, ex sezione
+    # anime): lista piatta di unita' dal dispatcher.
+    if series.media_type == "comic" or (series.media_type == "tv" and series.source != "tmdb"):
         if not series.external_id:
             raise HTTPException(status_code=400, detail="Titolo non collegato alla sorgente")
-        units = catalog.get_units(series.media_type, series.external_id)
+        units = catalog.get_units(series.media_type, series.source, series.external_id)
         crud.sync_episodes(db, series_id, units)
         return crud.list_episodes(db, series_id)
 

@@ -11,8 +11,10 @@ class SeriesBase(BaseModel):
     """Campi comuni, tutti opzionali tranne dove indicato."""
 
     title: str = Field(..., min_length=1, description="Titolo della serie")
-    media_type: str = Field(default="tv", description="tv, movie, anime, manga, book, comic")
-    source: str = Field(default="tmdb", description="Sorgente: tmdb, jikan, googlebooks, comicvine")
+    media_type: str = Field(default="tv", description="tv, movie, manga, book, comic")
+    source: str = Field(
+        default="tmdb", description="Sorgente: tmdb, anilist, jikan, googlebooks, comicvine"
+    )
     external_id: Optional[str] = Field(default=None, description="Id presso la sorgente (stringa)")
     status: Status = Field(default=Status.da_vedere, description="Stato di visione/lettura")
     rating: Optional[int] = Field(default=None, ge=1, le=10, description="Voto da 1 a 10")
@@ -199,7 +201,7 @@ class Recommendation(BaseModel):
     reason: Optional[str] = None  # es. "Perché hai visto «Dark»"
 
 
-_MEDIA_TYPE_PATTERN = "^(tv|movie|anime|manga|book|comic)$"
+_MEDIA_TYPE_PATTERN = "^(tv|movie|manga|book|comic)$"
 
 
 class DismissRequest(BaseModel):
@@ -228,11 +230,10 @@ class SettingsRead(BaseModel):
     """Preferenze dell'utente (generi preferiti separati per tipo).
 
     Solo i tipi con un elenco di generi a id numerici: tv/movie (TMDB) e
-    anime/manga (Jikan). Libri e fumetti non hanno preferenze di genere."""
+    manga (AniList). Libri e fumetti non hanno preferenze di genere."""
 
     preferred_genres_tv: list[int] = Field(default_factory=list)
     preferred_genres_movie: list[int] = Field(default_factory=list)
-    preferred_genres_anime: list[int] = Field(default_factory=list)
     preferred_genres_manga: list[int] = Field(default_factory=list)
 
 
@@ -241,7 +242,6 @@ class SettingsUpdate(BaseModel):
 
     preferred_genres_tv: Optional[list[int]] = None
     preferred_genres_movie: Optional[list[int]] = None
-    preferred_genres_anime: Optional[list[int]] = None
     preferred_genres_manga: Optional[list[int]] = None
 
 

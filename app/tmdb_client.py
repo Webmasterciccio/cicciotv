@@ -273,10 +273,19 @@ def _norm_item(item: dict[str, Any], media_type: str) -> dict[str, Any]:
     }
 
 
+# Il genere "Animazione" (id 16) e' gestito dalla sezione Anime (Jikan): lo
+# escludiamo da serie/film TMDB, sia dai generi selezionabili sia dai consigli.
+ANIMATION_GENRE_ID = 16
+
+
 def get_genres(media_type: str = "tv") -> list[dict[str, Any]]:
-    """Elenco dei generi (di serie o film) su TMDB."""
+    """Elenco dei generi (di serie o film) su TMDB, senza 'Animazione'."""
     data = _get(f"/genre/{_media_path(media_type)}/list", {})
-    return [{"id": g["id"], "name": g.get("name")} for g in data.get("genres", [])]
+    return [
+        {"id": g["id"], "name": g.get("name")}
+        for g in data.get("genres", [])
+        if g["id"] != ANIMATION_GENRE_ID
+    ]
 
 
 # Mappa i valori di ordinamento "amichevoli" ai parametri sort_by di TMDB.
@@ -306,6 +315,9 @@ def discover_by_genres(
 
     params: dict[str, Any] = {
         "with_genres": ",".join(str(g) for g in genre_ids),
+        # L'animazione e' coperta dalla sezione Anime: la escludiamo dai consigli
+        # di serie/film cosi' i titoli animati non compaiono qui.
+        "without_genres": str(ANIMATION_GENRE_ID),
         "sort_by": sort_by,
         # Con l'ordinamento per voto serve una soglia alta di voti per evitare
         # titoli oscuri con 10/10 su pochissime valutazioni.

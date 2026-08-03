@@ -1818,6 +1818,15 @@ select {
   line-height: 1.5;
 }
 
+.preview-section {
+  margin-top: 1.2rem;
+}
+
+.preview-section h3 {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+}
+
 @media (max-width: 480px) {
   .preview-head {
     flex-direction: column;

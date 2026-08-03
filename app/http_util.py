@@ -114,6 +114,12 @@ def get_json(
             status_code=503,
             detail=f"{service} ha applicato un limite di richieste. Riprova tra poco.",
         )
+    if response.status_code >= 500:
+        # Guasto a monte (es. Jikan quando MyAnimeList e' irraggiungibile).
+        raise HTTPException(
+            status_code=503,
+            detail=f"{service} non risponde in questo momento. Riprova tra poco.",
+        )
     if response.status_code >= 400:
         raise HTTPException(
             status_code=502, detail=f"Errore {service} ({response.status_code})."

@@ -152,6 +152,13 @@ def get_recommendations(media_type: str, source: str, external_id: str) -> list[
     return []
 
 
+def get_watch_providers(media_type: str, source: str, external_id: str) -> dict[str, Any]:
+    """Servizi 'dove vederla' (solo serie/film TMDB); vuoto per gli altri tipi."""
+    if source == "tmdb" and external_id and external_id.isdigit():
+        return tmdb_client.get_watch_providers(int(external_id), media_type)
+    return {"link": None, "providers": {}}
+
+
 def get_genres(media_type: str) -> list[dict[str, Any]]:
     if media_type in ("tv", "movie"):
         return tmdb_client.get_genres(media_type)

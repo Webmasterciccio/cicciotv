@@ -169,6 +169,16 @@ export function getCatalogDetails(item) {
   return request(`/catalog/details?${p.toString()}`)
 }
 
+// "Dove vederla" per un titolo non ancora in libreria (solo serie/film).
+export function getCatalogWatchProviders(item) {
+  const p = new URLSearchParams({
+    source: item.source,
+    external_id: String(item.external_id),
+    type: item.media_type,
+  })
+  return request(`/catalog/watch-providers?${p.toString()}`)
+}
+
 export function getSuggestions(type = 'tv', opts = {}) {
   const { limit = 20, sort, minRating, yearFrom, lang, exclude } = opts
   const params = new URLSearchParams({ type, limit })

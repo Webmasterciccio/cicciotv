@@ -67,6 +67,16 @@ def preview_details(
     return catalog.get_details(type, source, external_id)
 
 
+@router.get("/watch-providers", response_model=schemas.WatchProviders)
+def preview_watch_providers(
+    source: str = Query(...),
+    external_id: str = Query(...),
+    type: str = MediaType,
+):
+    """'Dove vederla' per un titolo non ancora in libreria (solo serie/film)."""
+    return catalog.get_watch_providers(type, source, external_id)
+
+
 @router.get("/suggestions", response_model=list[schemas.Recommendation])
 def suggestions(
     limit: int = Query(default=20, ge=1, le=40),

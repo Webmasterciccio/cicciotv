@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react'
-import { getCatalogDetails, importItem } from '../api.js'
+import { getCatalogDetails, getCatalogWatchProviders, importItem } from '../api.js'
 import Poster from './Poster.jsx'
 import { labelOf, unitLabel } from '../mediaMeta.js'
+
+// Etichette leggibili per le categorie di servizi restituite da TMDB.
+const PROVIDER_KIND_LABELS = {
+  flatrate: 'Abbonamento',
+  free: 'Gratis',
+  ads: 'Con pubblicità',
+  rent: 'Noleggio',
+  buy: 'Acquisto',
+}
 
 function addLabel(state) {
   if (state === 'adding') return 'Aggiungo…'
@@ -15,22 +24,31 @@ function addLabel(state) {
 // con trama, generi, dati specifici del tipo e il pulsante per aggiungere.
 function MediaPreview({ item, onClose, onAdded }) {
   const [details, setDetails] = useState(null)
+  const [providers, setProviders] = useState(null)
   const [error, setError] = useState(null)
   const [addState, setAddState] = useState(null)
 
   const type = item.media_type
+  const isWatchable = type === 'tv' || type === 'movie'
 
   useEffect(() => {
     let alive = true
     setDetails(null)
+    setProviders(null)
     setError(null)
     getCatalogDetails(item)
       .then((d) => alive && setDetails(d))
       .catch((e) => alive && setError(e.message))
+    // "Dove vederla" solo per serie/film; non blocca la scheda in caso di errore.
+    if (isWatchable) {
+      getCatalogWatchProviders(item)
+        .then((p) => alive && setProviders(p))
+        .catch(() => {})
+    }
     return () => {
       alive = false
     }
-  }, [item])
+  }, [item, isWatchable])
 
   // Chiusura con Esc e blocco dello scroll di sfondo mentre è aperta.
   useEffect(() => {
@@ -119,6 +137,51 @@ function MediaPreview({ item, onClose, onAdded }) {
           <div className="preview-overview">
             <p>{overview}</p>
           </div>
+        )}
+
+        {providers && Object.keys(providers.providers || {}).length > 0 && (
+          <section className="preview-section watch-providers">
+            <h3>Dove vederla</h3>
+            <div className="provider-groups">
+              {Object.entries(providers.providers).map(([kind, list]) => (
+                <div key={kind} className="provider-group">
+                  <span className="provider-kind">{PROVIDER_KIND_LABELS[kind] ?? kind}</span>
+                  <div className="provider-logos">
+                    {list.map((p) => (
+                      <span key={p.name} className="provider-chip" title={p.name}>
+                        {p.logo_url ? (
+                          <img src={p.logo_url} alt={p.name} loading="lazy" />
+                        ) : (
+                          <span className="provider-name">{p.name}</span>
+                        )}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {d.cast?.length > 0 && (
+          <section className="preview-section cast-section">
+            <h3>{type === 'comic' ? 'Personaggi' : 'Cast'}</h3>
+            <div className="cast-row">
+              {d.cast.map((p) => (
+                <div key={`${p.name}-${p.character}`} className="cast-card">
+                  {p.profile_url ? (
+                    <img src={p.profile_url} alt={p.name} loading="lazy" className="cast-photo" />
+                  ) : (
+                    <div className="cast-photo cast-photo-empty" aria-hidden="true">
+                      {p.name?.slice(0, 1)}
+                    </div>
+                  )}
+                  <span className="cast-name">{p.name}</span>
+                  {p.character && <span className="cast-character hint">{p.character}</span>}
+                </div>
+              ))}
+            </div>
+          </section>
         )}
       </div>
     </div>

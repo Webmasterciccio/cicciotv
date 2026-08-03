@@ -27,7 +27,7 @@ def _get(path: str, params: Optional[dict] = None, *, not_found_ok: bool = False
         service=SERVICE,
         min_interval=_MIN_INTERVAL,
         not_found_ok=not_found_ok,
-        retries=2,  # Jikan ogni tanto risponde 502/504: piu' tentativi
+        retries=3,  # MyAnimeList a monte e' spesso intermittente: piu' tentativi
     )
 
 

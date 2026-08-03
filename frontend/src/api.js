@@ -159,6 +159,16 @@ export function getGenres(type = 'tv') {
   return request(`/catalog/genres?type=${type}`)
 }
 
+// Dettagli di un titolo non ancora in libreria (anteprima prima di aggiungerlo).
+export function getCatalogDetails(item) {
+  const p = new URLSearchParams({
+    source: item.source,
+    external_id: String(item.external_id),
+    type: item.media_type,
+  })
+  return request(`/catalog/details?${p.toString()}`)
+}
+
 export function getSuggestions(type = 'tv', opts = {}) {
   const { limit = 20, sort, minRating, yearFrom, lang, exclude } = opts
   const params = new URLSearchParams({ type, limit })

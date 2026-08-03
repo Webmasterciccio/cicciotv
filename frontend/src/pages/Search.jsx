@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { importItem, searchCatalog } from '../api.js'
+import MediaPreview from '../components/MediaPreview.jsx'
 import Poster from '../components/Poster.jsx'
 import Suggestions from '../components/Suggestions.jsx'
 import { MEDIA_TYPES, searchPlaceholder, suggestionsTitle } from '../mediaMeta.js'
@@ -19,6 +20,7 @@ function Search() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [addState, setAddState] = useState({}) // external_id -> stato
+  const [preview, setPreview] = useState(null) // item mostrato in anteprima
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -112,9 +114,19 @@ function Search() {
                 .join(' · ')
               return (
                 <div key={`${item.source}-${item.external_id}`} className="search-result">
-                  <Poster url={item.poster_url} title={item.title} />
+                  <button
+                    type="button"
+                    className="result-open"
+                    onClick={() => setPreview(item)}
+                    title="Vedi dettagli"
+                    aria-label={`Dettagli di ${item.title}`}
+                  >
+                    <Poster url={item.poster_url} title={item.title} />
+                  </button>
                   <div className="search-result-body">
-                    <h3>{item.title}</h3>
+                    <button type="button" className="result-title" onClick={() => setPreview(item)}>
+                      {item.title}
+                    </button>
                     <p className="hint">{sub || 'Data sconosciuta'}</p>
                     {item.overview && <p className="overview">{item.overview}</p>}
                     <button
@@ -135,6 +147,14 @@ function Search() {
       {/* Consigli (quando non stai cercando) */}
       {results === null && (
         <Suggestions mediaType={mediaType} title={suggestionsTitle(mediaType)} />
+      )}
+
+      {preview && (
+        <MediaPreview
+          item={preview}
+          onClose={() => setPreview(null)}
+          onAdded={(it) => setAddState((prev) => ({ ...prev, [it.external_id]: 'added' }))}
+        />
       )}
     </div>
   )

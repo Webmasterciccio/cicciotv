@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { dismissSuggestion, getSuggestions, importItem } from '../api.js'
+import MediaPreview from './MediaPreview.jsx'
 import Poster from './Poster.jsx'
 import { isRead } from '../mediaMeta.js'
 
@@ -35,6 +36,7 @@ function addLabel(state) {
 function Suggestions({ title = 'Consigliati per te', mediaType = 'tv' }) {
   const [items, setItems] = useState(null)
   const [addState, setAddState] = useState({})
+  const [preview, setPreview] = useState(null)
   const [loadingMore, setLoadingMore] = useState(false)
   const [sort, setSort] = useState('popularity')
   const [minRating, setMinRating] = useState('')
@@ -174,9 +176,23 @@ function Suggestions({ title = 'Consigliati per te', mediaType = 'tv' }) {
                   >
                     ✕
                   </button>
-                  <Poster url={item.poster_url} title={item.title} />
+                  <button
+                    type="button"
+                    className="result-open"
+                    onClick={() => setPreview(item)}
+                    title="Vedi dettagli"
+                    aria-label={`Dettagli di ${item.title}`}
+                  >
+                    <Poster url={item.poster_url} title={item.title} />
+                  </button>
                   <div className="suggestion-body">
-                    <h3 className="suggestion-title">{item.title}</h3>
+                    <button
+                      type="button"
+                      className="result-title suggestion-title"
+                      onClick={() => setPreview(item)}
+                    >
+                      {item.title}
+                    </button>
                     {item.reason && <p className="suggestion-reason">{item.reason}</p>}
                     <p className="hint suggestion-meta">
                       {[
@@ -209,6 +225,14 @@ function Suggestions({ title = 'Consigliati per te', mediaType = 'tv' }) {
             {loadingMore ? 'Carico…' : 'Mostra altri'}
           </button>
         </>
+      )}
+
+      {preview && (
+        <MediaPreview
+          item={preview}
+          onClose={() => setPreview(null)}
+          onAdded={(it) => setAddState((prev) => ({ ...prev, [it.external_id]: 'added' }))}
+        />
       )}
     </section>
   )

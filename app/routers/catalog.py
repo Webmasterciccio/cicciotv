@@ -56,6 +56,17 @@ def genres(type: str = MediaType):
     return catalog.get_genres(type)
 
 
+@router.get("/details", response_model=schemas.MediaDetails)
+def preview_details(
+    source: str = Query(..., description="Sorgente del titolo"),
+    external_id: str = Query(..., description="Id presso la sorgente"),
+    type: str = MediaType,
+):
+    """Dettagli estesi di un titolo NON ancora in libreria (per l'anteprima
+    prima dell'aggiunta): trama, generi, autori, dati specifici del tipo."""
+    return catalog.get_details(type, source, external_id)
+
+
 @router.get("/suggestions", response_model=list[schemas.Recommendation])
 def suggestions(
     limit: int = Query(default=20, ge=1, le=40),

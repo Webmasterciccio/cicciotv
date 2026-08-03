@@ -136,18 +136,27 @@ export function deleteSeries(id) {
   return request(`/series/${id}`, { method: 'DELETE' })
 }
 
-// --- TMDB ---
+// --- Catalogo multi-sorgente (TMDB, Jikan, Google Books, Comic Vine) ---
 
-export function searchTmdb(query, type = 'tv') {
-  return request(`/tmdb/search?query=${encodeURIComponent(query)}&type=${type}`)
+export function searchCatalog(query, type = 'tv') {
+  return request(`/catalog/search?query=${encodeURIComponent(query)}&type=${type}`)
 }
 
-export function importFromTmdb(tmdbId, status = 'da_vedere', type = 'tv') {
-  return request(`/tmdb/import/${tmdbId}?status=${status}&type=${type}`, { method: 'POST' })
+// item = { source, external_id, media_type } (dai risultati di ricerca/consigli).
+export function importItem(item, status = 'da_vedere') {
+  return request('/catalog/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      source: item.source,
+      external_id: String(item.external_id),
+      media_type: item.media_type,
+      status,
+    }),
+  })
 }
 
 export function getGenres(type = 'tv') {
-  return request(`/tmdb/genres?type=${type}`)
+  return request(`/catalog/genres?type=${type}`)
 }
 
 export function getSuggestions(type = 'tv', opts = {}) {
@@ -158,13 +167,17 @@ export function getSuggestions(type = 'tv', opts = {}) {
   if (yearFrom) params.set('year_from', yearFrom)
   if (lang) params.set('lang', lang)
   if (exclude && exclude.length) params.set('exclude', exclude.join(','))
-  return request(`/tmdb/suggestions?${params.toString()}`)
+  return request(`/catalog/suggestions?${params.toString()}`)
 }
 
-export function dismissSuggestion(tmdbId, type = 'tv') {
-  return request('/tmdb/suggestions/dismiss', {
+export function dismissSuggestion(item) {
+  return request('/catalog/suggestions/dismiss', {
     method: 'POST',
-    body: JSON.stringify({ tmdb_id: tmdbId, media_type: type }),
+    body: JSON.stringify({
+      source: item.source,
+      external_id: String(item.external_id),
+      media_type: item.media_type,
+    }),
   })
 }
 
@@ -192,8 +205,8 @@ export function getWatchProviders(seriesId) {
   return request(`/series/${seriesId}/watch-providers`)
 }
 
-export function getTmdbDetails(seriesId) {
-  return request(`/series/${seriesId}/tmdb`)
+export function getMediaDetails(seriesId) {
+  return request(`/series/${seriesId}/details`)
 }
 
 export function getRecommendations(seriesId) {

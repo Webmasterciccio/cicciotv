@@ -1,7 +1,16 @@
 import { useState } from 'react'
-import { importFromTmdb, searchTmdb } from '../api.js'
+import { importItem, searchCatalog } from '../api.js'
 import Poster from '../components/Poster.jsx'
 import Suggestions from '../components/Suggestions.jsx'
+import { MEDIA_TYPES, searchPlaceholder, suggestionsTitle } from '../mediaMeta.js'
+
+function addLabel(state) {
+  if (state === 'adding') return 'Aggiungo…'
+  if (state === 'added') return 'Aggiunto ✓'
+  if (state === 'exists') return 'Già in libreria'
+  if (state === 'error') return 'Riprova'
+  return 'Aggiungi'
+}
 
 function Search() {
   const [mediaType, setMediaType] = useState('tv')
@@ -9,7 +18,7 @@ function Search() {
   const [results, setResults] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
-  const [addState, setAddState] = useState({}) // tmdb_id -> 'adding' | 'added' | 'exists' | 'error'
+  const [addState, setAddState] = useState({}) // external_id -> stato
 
   async function handleSubmit(event) {
     event.preventDefault()
@@ -17,7 +26,7 @@ function Search() {
     setLoading(true)
     setError(null)
     try {
-      const data = await searchTmdb(query.trim(), mediaType)
+      const data = await searchCatalog(query.trim(), mediaType)
       setResults(data)
       setAddState({})
     } catch (err) {
@@ -39,39 +48,38 @@ function Search() {
     setError(null)
   }
 
-  async function handleAdd(tmdbId) {
-    setAddState((prev) => ({ ...prev, [tmdbId]: 'adding' }))
+  async function handleAdd(item) {
+    setAddState((prev) => ({ ...prev, [item.external_id]: 'adding' }))
     try {
-      await importFromTmdb(tmdbId, 'da_vedere', mediaType)
-      setAddState((prev) => ({ ...prev, [tmdbId]: 'added' }))
+      await importItem(item, 'da_vedere')
+      setAddState((prev) => ({ ...prev, [item.external_id]: 'added' }))
     } catch (err) {
-      setAddState((prev) => ({ ...prev, [tmdbId]: err.status === 409 ? 'exists' : 'error' }))
+      setAddState((prev) => ({
+        ...prev,
+        [item.external_id]: err.status === 409 ? 'exists' : 'error',
+      }))
     }
   }
 
   return (
     <div className="search-page">
-      <div className="type-toggle">
-        <button
-          type="button"
-          className={mediaType === 'tv' ? 'on' : ''}
-          onClick={() => changeType('tv')}
-        >
-          Serie TV
-        </button>
-        <button
-          type="button"
-          className={mediaType === 'movie' ? 'on' : ''}
-          onClick={() => changeType('movie')}
-        >
-          Film
-        </button>
+      <div className="type-toggle type-toggle-scroll">
+        {MEDIA_TYPES.map((m) => (
+          <button
+            key={m.type}
+            type="button"
+            className={mediaType === m.type ? 'on' : ''}
+            onClick={() => changeType(m.type)}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
 
       <form onSubmit={handleSubmit} className="search-form">
         <input
           type="text"
-          placeholder={mediaType === 'movie' ? 'Cerca un film…' : 'Cerca una serie TV…'}
+          placeholder={searchPlaceholder(mediaType)}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           autoFocus
@@ -95,24 +103,26 @@ function Search() {
           {results.length === 0 && <p className="hint">Nessun risultato.</p>}
           <div className="search-results">
             {results.map((item) => {
-              const state = addState[item.tmdb_id]
+              const state = addState[item.external_id]
+              const sub = [
+                item.first_air_date?.slice(0, 4),
+                (item.authors || [])[0],
+              ]
+                .filter(Boolean)
+                .join(' · ')
               return (
-                <div key={item.tmdb_id} className="search-result">
+                <div key={`${item.source}-${item.external_id}`} className="search-result">
                   <Poster url={item.poster_url} title={item.title} />
                   <div className="search-result-body">
                     <h3>{item.title}</h3>
-                    <p className="hint">{item.first_air_date?.slice(0, 4) || 'Data sconosciuta'}</p>
+                    <p className="hint">{sub || 'Data sconosciuta'}</p>
                     {item.overview && <p className="overview">{item.overview}</p>}
                     <button
                       type="button"
-                      onClick={() => handleAdd(item.tmdb_id)}
+                      onClick={() => handleAdd(item)}
                       disabled={state === 'adding' || state === 'added' || state === 'exists'}
                     >
-                      {state === 'adding' && 'Aggiungo…'}
-                      {state === 'added' && 'Aggiunta ✓'}
-                      {state === 'exists' && "Già in libreria"}
-                      {state === 'error' && 'Riprova'}
-                      {!state && 'Aggiungi'}
+                      {addLabel(state)}
                     </button>
                   </div>
                 </div>
@@ -122,12 +132,9 @@ function Search() {
         </>
       )}
 
-      {/* Consigli in base ai generi preferiti (quando non stai cercando) */}
+      {/* Consigli (quando non stai cercando) */}
       {results === null && (
-        <Suggestions
-          mediaType={mediaType}
-          title={mediaType === 'movie' ? 'Film consigliati per te' : 'Serie consigliate per te'}
-        />
+        <Suggestions mediaType={mediaType} title={suggestionsTitle(mediaType)} />
       )}
     </div>
   )

@@ -3,19 +3,7 @@ import { Link } from 'react-router-dom'
 import { listSeries } from '../api.js'
 import SeriesCard from '../components/SeriesCard.jsx'
 import Suggestions from '../components/Suggestions.jsx'
-
-// Sezioni (stati) diverse per tipo: i film non hanno lo stato "in corso".
-const SECTIONS = {
-  tv: [
-    { status: 'in_corso', title: 'In corso' },
-    { status: 'da_vedere', title: 'Da vedere' },
-    { status: 'vista', title: 'Viste' },
-  ],
-  movie: [
-    { status: 'da_vedere', title: 'Da vedere' },
-    { status: 'vista', title: 'Visti' },
-  ],
-}
+import { MEDIA_TYPES, emptyLibrary, sections, suggestionsTitle } from '../mediaMeta.js'
 
 function Dashboard() {
   const [mediaType, setMediaType] = useState('tv')
@@ -32,42 +20,33 @@ function Dashboard() {
   if (series === null) return <p className="hint">Caricamento…</p>
 
   const library = series.filter((s) => (s.media_type || 'tv') === mediaType)
-  const sections = SECTIONS[mediaType]
+  const secs = sections(mediaType)
 
   return (
     <div className="dashboard">
-      <div className="type-toggle">
-        <button
-          type="button"
-          className={mediaType === 'tv' ? 'on' : ''}
-          onClick={() => setMediaType('tv')}
-        >
-          Serie TV
-        </button>
-        <button
-          type="button"
-          className={mediaType === 'movie' ? 'on' : ''}
-          onClick={() => setMediaType('movie')}
-        >
-          Film
-        </button>
+      <div className="type-toggle type-toggle-scroll">
+        {MEDIA_TYPES.map((m) => (
+          <button
+            key={m.type}
+            type="button"
+            className={mediaType === m.type ? 'on' : ''}
+            onClick={() => setMediaType(m.type)}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
 
       {library.length === 0 ? (
         <>
           <p className="hint">
-            {mediaType === 'movie'
-              ? 'Non hai ancora film in libreria.'
-              : 'Non hai ancora serie in libreria.'}{' '}
-            Cerca in <Link to="/cerca">Cerca</Link> oppure aggiungi uno dei consigli qui sotto.
+            {emptyLibrary(mediaType)} Cerca in <Link to="/cerca">Cerca</Link> oppure aggiungi uno
+            dei consigli qui sotto.
           </p>
-          <Suggestions
-            mediaType={mediaType}
-            title={mediaType === 'movie' ? 'Film consigliati per te' : 'Serie consigliate per te'}
-          />
+          <Suggestions mediaType={mediaType} title={suggestionsTitle(mediaType)} />
         </>
       ) : (
-        sections.map(({ status, title }) => {
+        secs.map(({ status, title }) => {
           const items = library.filter((s) => s.status === status)
           return (
             <section key={status} className="dashboard-section">

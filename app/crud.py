@@ -9,8 +9,12 @@ from . import models, schemas
 from .models import Status
 
 
+# Tipi che hanno un elenco di generi a id numerici (TMDB e Jikan).
+_GENRE_TYPES = ("tv", "movie", "anime", "manga")
+
+
 def _preferred_genres_key(media_type: str) -> str:
-    kind = "movie" if media_type == "movie" else "tv"
+    kind = media_type if media_type in _GENRE_TYPES else "tv"
     return f"preferred_genres_{kind}"
 
 
@@ -36,6 +40,22 @@ def get_series_by_tmdb_id(
     if media_type is not None:
         query = query.filter(models.Series.media_type == media_type)
     return query.first()
+
+
+def get_series_by_external(
+    db: Session, user_id: int, source: str, external_id: str, media_type: str
+) -> Optional[models.Series]:
+    """Deduplica per sorgente: un titolo e' unico per (utente, sorgente, id, tipo)."""
+    return (
+        db.query(models.Series)
+        .filter(
+            models.Series.user_id == user_id,
+            models.Series.source == source,
+            models.Series.external_id == str(external_id),
+            models.Series.media_type == media_type,
+        )
+        .first()
+    )
 
 
 def list_series(
@@ -76,10 +96,26 @@ def update_series(
 
     if "status" in changes:
         _sync_watch_dates(series, previous_status=previous_status)
+    elif "progress_current" in changes:
+        # Manga/libri: lo stato segue il progresso (letto/in lettura) se non e'
+        # stato impostato esplicitamente nella stessa richiesta.
+        _sync_progress_status(series, previous_status=previous_status)
 
     db.commit()
     db.refresh(series)
     return series
+
+
+def _sync_progress_status(series: models.Series, previous_status) -> None:
+    """Deriva lo stato dal progresso a pagine/capitoli per i tipi senza episodi."""
+    current = series.progress_current or 0
+    total = series.progress_total or 0
+    if total and current >= total:
+        series.status = Status.vista
+    elif current > 0:
+        series.status = Status.in_corso
+    if series.status != previous_status:
+        _sync_watch_dates(series, previous_status=previous_status)
 
 
 def delete_series(db: Session, series: models.Series) -> None:
@@ -238,6 +274,21 @@ def get_library_tmdb_ids(
     return {r[0] for r in query.all()}
 
 
+def get_library_external_ids(db: Session, user_id: int, media_type: str) -> set[str]:
+    """External_id (stringa) dei titoli in libreria per quel tipo: serve a non
+    riproporre nei consigli cio' che l'utente ha gia'."""
+    rows = (
+        db.query(models.Series.external_id)
+        .filter(
+            models.Series.user_id == user_id,
+            models.Series.media_type == media_type,
+            models.Series.external_id.isnot(None),
+        )
+        .all()
+    )
+    return {r[0] for r in rows}
+
+
 # Voto minimo perche' un titolo in libreria sia considerato "piaciuto" (seme).
 _SEED_MIN_RATING = 7
 
@@ -252,7 +303,7 @@ def get_seed_series(
         .filter(
             models.Series.user_id == user_id,
             models.Series.media_type == media_type,
-            models.Series.tmdb_id.isnot(None),
+            models.Series.external_id.isnot(None),
         )
         .filter(
             (models.Series.status == Status.vista)
@@ -268,9 +319,9 @@ def get_seed_series(
     return rows[:limit]
 
 
-def get_dismissed_ids(db: Session, user_id: int, media_type: str) -> set[int]:
+def get_dismissed_ids(db: Session, user_id: int, media_type: str) -> set[str]:
     rows = (
-        db.query(models.Dismissal.tmdb_id)
+        db.query(models.Dismissal.external_id)
         .filter(
             models.Dismissal.user_id == user_id,
             models.Dismissal.media_type == media_type,
@@ -280,10 +331,19 @@ def get_dismissed_ids(db: Session, user_id: int, media_type: str) -> set[int]:
     return {r[0] for r in rows}
 
 
-def add_dismissal(db: Session, user_id: int, media_type: str, tmdb_id: int) -> None:
-    exists = db.get(models.Dismissal, (user_id, media_type, tmdb_id))
-    if exists is None:
-        db.add(models.Dismissal(user_id=user_id, media_type=media_type, tmdb_id=tmdb_id))
+def add_dismissal(
+    db: Session, user_id: int, media_type: str, source: str, external_id: str
+) -> None:
+    key = (user_id, media_type, source, str(external_id))
+    if db.get(models.Dismissal, key) is None:
+        db.add(
+            models.Dismissal(
+                user_id=user_id,
+                media_type=media_type,
+                source=source,
+                external_id=str(external_id),
+            )
+        )
         db.commit()
 
 
@@ -420,14 +480,36 @@ def _watch_insights(tv_series: list, episodes: list) -> tuple[list[str], list[di
 def compute_stats(db: Session, user_id: int) -> dict:
     """Calcola le statistiche della libreria dell'utente a partire dai dati locali."""
     all_media = db.query(models.Series).filter(models.Series.user_id == user_id).all()
-    series = [s for s in all_media if s.media_type != "movie"]
+    # Le sezioni "Serie TV" e "Film" restano sui rispettivi tipi; gli altri
+    # (anime, manga, libri, fumetti) sono riepilogati nella panoramica per tipo.
+    series = [s for s in all_media if s.media_type == "tv"]
     movies = [s for s in all_media if s.media_type == "movie"]
     episodes = (
         db.query(models.Episode)
         .join(models.Series, models.Episode.series_id == models.Series.id)
-        .filter(models.Series.user_id == user_id)
+        .filter(models.Series.user_id == user_id, models.Series.media_type == "tv")
         .all()
     )
+
+    # Panoramica per tipo (tutti i tipi presenti in libreria).
+    by_type = []
+    for t in ("tv", "movie", "anime", "manga", "book", "comic"):
+        items = [s for s in all_media if s.media_type == t]
+        if not items:
+            continue
+        type_ratings = [s.rating for s in items if s.rating is not None]
+        by_type.append(
+            {
+                "media_type": t,
+                "total": len(items),
+                "to_watch": sum(1 for s in items if s.status == Status.da_vedere),
+                "in_progress": sum(1 for s in items if s.status == Status.in_corso),
+                "completed": sum(1 for s in items if s.status == Status.vista),
+                "average_rating": round(sum(type_ratings) / len(type_ratings), 1)
+                if type_ratings
+                else None,
+            }
+        )
 
     watched = [e for e in episodes if e.watched]
     ratings = [s.rating for s in series if s.rating is not None]
@@ -508,6 +590,7 @@ def compute_stats(db: Session, user_id: int) -> dict:
         "movies": movies_stats,
         "watch_insights": watch_insights,
         "episodes_by_weekday": episodes_by_weekday,
+        "by_type": by_type,
     }
 
 

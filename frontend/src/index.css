@@ -1588,3 +1588,116 @@ select {
   flex: 1;
   min-width: 6rem;
 }
+
+/* --- Multi-sorgente --- */
+
+/* Toggle con molte voci (i tipi di media): scorre in orizzontale se non entra. */
+.type-toggle-scroll {
+  display: flex;
+  max-width: 100%;
+  overflow-x: auto;
+  gap: 2px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.type-toggle-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.type-toggle-scroll button {
+  white-space: nowrap;
+  flex: 0 0 auto;
+  padding: 0.4rem 0.9rem;
+}
+
+/* Progresso di lettura (manga: capitoli, libri: pagine). */
+.progress-section {
+  margin-top: 1.5rem;
+}
+
+.progress-tracker {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  background: var(--surface);
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin-bottom: 0.6rem;
+}
+
+.progress-label {
+  font-weight: 600;
+}
+
+.progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  margin-bottom: 0.8rem;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.progress-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.progress-controls input[type='number'] {
+  width: 5rem;
+  text-align: center;
+}
+
+.progress-controls button {
+  padding: 0.4rem 0.8rem;
+}
+
+.progress-done {
+  margin-left: auto;
+}
+
+/* Panoramica statistiche per tipo di media. */
+.by-type-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
+}
+
+.by-type-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.8rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+
+.by-type-label {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.by-type-total {
+  font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.by-type-breakdown {
+  font-size: 0.75rem;
+}

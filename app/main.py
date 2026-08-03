@@ -6,9 +6,24 @@ from sqlalchemy import inspect, text
 from . import auth
 from .database import Base, engine
 from .routers import auth as auth_router
-from .routers import series, settings, stats, tmdb, users
+from .routers import catalog, series, settings, stats, users
 
-# Crea le tabelle nel database al primo avvio (se non esistono gia').
+def _drop_old_dismissals() -> None:
+    """La tabella 'dismissals' (recentissima) e' passata dalla chiave tmdb_id
+    (intero) a source+external_id (stringa). Se la troviamo con lo schema vecchio
+    la eliminiamo: verra' ricreata subito da create_all nella nuova forma. I
+    pochi flag 'non mi interessa' eventualmente persi sono trascurabili."""
+    inspector = inspect(engine)
+    if "dismissals" not in inspector.get_table_names():
+        return
+    cols = {c["name"] for c in inspector.get_columns("dismissals")}
+    if "tmdb_id" in cols and "external_id" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE dismissals"))
+
+
+# Adegua le tabelle preesistenti prima di (ri)crearle, poi crea quelle mancanti.
+_drop_old_dismissals()
 Base.metadata.create_all(bind=engine)
 
 
@@ -30,6 +45,10 @@ def _add_missing_columns() -> None:
             "watch_location": "VARCHAR",
             "genres": "TEXT",
             "user_id": "INTEGER",
+            "source": "VARCHAR DEFAULT 'tmdb'",
+            "external_id": "VARCHAR",
+            "progress_current": "INTEGER",
+            "progress_total": "INTEGER",
         },
         "users": {
             "is_admin": "BOOLEAN DEFAULT 0",
@@ -87,8 +106,29 @@ def _migrate_multiuser() -> None:
                     )
 
 
+def _migrate_sources() -> None:
+    """Passaggio a multi-sorgente: le righe preesistenti sono tutte di TMDB.
+    Imposta source='tmdb' dove mancante e copia tmdb_id in external_id (stringa),
+    cosi' la deduplica e i consigli funzionano in modo uniforme. Idempotente."""
+    inspector = inspect(engine)
+    if "series" not in set(inspector.get_table_names()):
+        return
+    cols = {c["name"] for c in inspector.get_columns("series")}
+    if "source" not in cols or "external_id" not in cols:
+        return  # colonne non ancora presenti: le aggiunge _add_missing_columns
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE series SET source='tmdb' WHERE source IS NULL"))
+        conn.execute(
+            text(
+                "UPDATE series SET external_id = CAST(tmdb_id AS TEXT) "
+                "WHERE external_id IS NULL AND tmdb_id IS NOT NULL"
+            )
+        )
+
+
 _add_missing_columns()
 _migrate_multiuser()
+_migrate_sources()
 
 app = FastAPI(
     title="CiccioTV",
@@ -113,7 +153,7 @@ protected = [Depends(auth.get_current_user)]
 app.include_router(auth_router.router)
 app.include_router(users.router)
 app.include_router(series.router, dependencies=protected)
-app.include_router(tmdb.router, dependencies=protected)
+app.include_router(catalog.router, dependencies=protected)
 app.include_router(settings.router, dependencies=protected)
 app.include_router(stats.router, dependencies=protected)
 

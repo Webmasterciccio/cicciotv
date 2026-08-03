@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { getStats } from '../api.js'
 import MonthlyChart from '../components/MonthlyChart.jsx'
 import WeekdayChart from '../components/WeekdayChart.jsx'
+import { labelOf } from '../mediaMeta.js'
 
 function formatWatchTime(minutes) {
   if (!minutes) return '0 min'
@@ -59,6 +60,25 @@ function Stats() {
   return (
     <div className="stats-page">
       <h1>Statistiche</h1>
+
+      {(stats.by_type || []).length > 0 && (
+        <section className="by-type-section">
+          <h2 className="stats-heading">Panoramica per tipo</h2>
+          <div className="by-type-grid">
+            {stats.by_type.map((t) => (
+              <div key={t.media_type} className="by-type-card">
+                <span className="by-type-label">{labelOf(t.media_type)}</span>
+                <span className="by-type-total">{t.total}</span>
+                <span className="by-type-breakdown hint">
+                  {t.in_progress > 0 && <>{t.in_progress} in corso · </>}
+                  {t.to_watch} da fare · {t.completed} finiti
+                  {t.average_rating != null && <> · ★ {t.average_rating}</>}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       {stats.watch_insights.length > 0 && (
         <section className="insights-section">

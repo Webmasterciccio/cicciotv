@@ -10,6 +10,10 @@ import {
   updateUser,
 } from '../api.js'
 import { useAuth } from '../auth.jsx'
+import { MEDIA_TYPES } from '../mediaMeta.js'
+
+// Solo i tipi con un elenco di generi a id numerici (TMDB e Jikan).
+const GENRE_TYPES = MEDIA_TYPES.filter((m) => m.hasGenres)
 
 function UsersSection() {
   const { user: me } = useAuth()
@@ -121,19 +125,22 @@ function UsersSection() {
 function Settings() {
   const { user } = useAuth()
   const [mediaType, setMediaType] = useState('tv')
-  const [genresByType, setGenresByType] = useState({}) // { tv: [...], movie: [...] }
-  const [selected, setSelected] = useState({ tv: new Set(), movie: new Set() })
+  const [genresByType, setGenresByType] = useState({}) // { tv: [...], ... }
+  const [selected, setSelected] = useState(() =>
+    Object.fromEntries(GENRE_TYPES.map((m) => [m.type, new Set()])),
+  )
   const [error, setError] = useState(null)
   const [savedAt, setSavedAt] = useState(false)
 
-  // Carica le preferenze salvate (entrambi i tipi) una volta sola.
+  // Carica le preferenze salvate (tutti i tipi con generi) una volta sola.
   useEffect(() => {
     getSettings()
       .then((s) =>
-        setSelected({
-          tv: new Set(s.preferred_genres_tv),
-          movie: new Set(s.preferred_genres_movie),
-        }),
+        setSelected(
+          Object.fromEntries(
+            GENRE_TYPES.map((m) => [m.type, new Set(s[`preferred_genres_${m.type}`] || [])]),
+          ),
+        ),
       )
       .catch((err) => setError(err.message))
   }, [])
@@ -154,8 +161,7 @@ function Settings() {
     setSelected(nextSelected)
     setSavedAt(false)
     try {
-      const key = mediaType === 'movie' ? 'preferred_genres_movie' : 'preferred_genres_tv'
-      await updateSettings({ [key]: [...next] })
+      await updateSettings({ [`preferred_genres_${mediaType}`]: [...next] })
       setSavedAt(true)
     } catch (err) {
       setError(err.message)
@@ -174,32 +180,25 @@ function Settings() {
       <section>
         <h2>Generi preferiti</h2>
         <p className="hint">
-          Scegli i generi che ti piacciono, separatamente per serie e film: nella pagina{' '}
-          <Link to="/cerca">Cerca</Link> troverai in automatico dei consigli sul prossimo titolo
-          da guardare.
+          Scegli i generi che ti piacciono, separatamente per ogni tipo: nella pagina{' '}
+          <Link to="/cerca">Cerca</Link> troverai in automatico dei consigli sul prossimo titolo.
+          Libri e fumetti non hanno generi da scegliere.
         </p>
 
-        <div className="type-toggle">
-          <button
-            type="button"
-            className={mediaType === 'tv' ? 'on' : ''}
-            onClick={() => {
-              setMediaType('tv')
-              setSavedAt(false)
-            }}
-          >
-            Serie TV
-          </button>
-          <button
-            type="button"
-            className={mediaType === 'movie' ? 'on' : ''}
-            onClick={() => {
-              setMediaType('movie')
-              setSavedAt(false)
-            }}
-          >
-            Film
-          </button>
+        <div className="type-toggle type-toggle-scroll">
+          {GENRE_TYPES.map((m) => (
+            <button
+              key={m.type}
+              type="button"
+              className={mediaType === m.type ? 'on' : ''}
+              onClick={() => {
+                setMediaType(m.type)
+                setSavedAt(false)
+              }}
+            >
+              {m.label}
+            </button>
+          ))}
         </div>
 
         {!genres ? (

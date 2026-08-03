@@ -3,11 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import {
   deleteSeries,
   getEpisodes,
+  getMediaDetails,
   getRecommendations,
   getSeries,
-  getTmdbDetails,
   getWatchProviders,
-  importFromTmdb,
+  importItem,
   setEpisodeWatched,
   setSeasonWatched,
   syncEpisodes,
@@ -15,12 +15,8 @@ import {
   watchEpisodesUpTo,
 } from '../api.js'
 import Poster from '../components/Poster.jsx'
-
-const STATUS_LABELS = {
-  da_vedere: 'Da vedere',
-  in_corso: 'In corso',
-  vista: 'Vista',
-}
+import ProgressTracker from '../components/ProgressTracker.jsx'
+import { hasProgress, hasUnitList, statusLabels, unitLabel } from '../mediaMeta.js'
 
 // Etichette leggibili per le categorie di servizi restituite da TMDB.
 const PROVIDER_KIND_LABELS = {
@@ -84,7 +80,7 @@ function SeriesDetail() {
         getSeries(id),
         getEpisodes(id),
         getWatchProviders(id),
-        getTmdbDetails(id),
+        getMediaDetails(id),
         getRecommendations(id),
       ])
       setSeries(seriesData)
@@ -194,15 +190,20 @@ function SeriesDetail() {
 
   async function handleAddRecommendation(rec) {
     try {
-      const created = await importFromTmdb(rec.tmdb_id, 'da_vedere', series?.media_type ?? 'tv')
+      const created = await importItem(rec, 'da_vedere')
       navigate(`/serie/${created.id}`)
     } catch (err) {
       if (err.status === 409) {
-        window.alert('Questa serie è già nella tua libreria.')
+        window.alert('Questo titolo è già nella tua libreria.')
       } else {
         window.alert(`Impossibile aggiungere: ${err.message}`)
       }
     }
+  }
+
+  async function handleProgressChange(next) {
+    const updated = await updateSeries(id, { progress_current: next })
+    setSeries(updated)
   }
 
   async function handleSeasonToggle(seasonNumber, watched) {
@@ -215,14 +216,29 @@ function SeriesDetail() {
   if (error) return <p className="error">Errore: {error}</p>
   if (series === null) return <p className="hint">Caricamento…</p>
 
+  const type = series.media_type || 'tv'
   const seasons = groupBySeason(episodes ?? [])
   const d = details ?? {}
-  const isMovie = series.media_type === 'movie'
-  const statusOptions = isMovie ? { da_vedere: 'Da vedere', vista: 'Visto' } : STATUS_LABELS
+  const isMovie = type === 'movie'
+  const labels = statusLabels(type)
+  const statusOptions = isMovie ? { da_vedere: labels.da_vedere, vista: labels.vista } : labels
+  const showUnits = hasUnitList(type) // tv/anime/comic → lista episodi/numeri
+  const showProgress = hasProgress(type) // manga/libri → progresso numerico
+  const unitsTitle = type === 'comic' ? 'Numeri' : 'Episodi'
+
+  // Etichetta del titolo di credito, diversa per sorgente.
+  const creditLabel = { tv: 'Creata da', movie: 'Regia di', anime: 'Studio', manga: 'Autore', book: 'Autore', comic: 'Editore' }[type]
+  const credit =
+    type === 'anime'
+      ? d.studio
+      : type === 'comic'
+        ? d.publisher
+        : (d.authors?.length ? d.authors.join(', ') : (d.created_by || []).join(', '))
 
   // Riga di metadati compatta (solo le voci disponibili).
+  const typeBadge = { movie: 'Film', anime: 'Anime', manga: 'Manga', book: 'Libro', comic: 'Fumetto' }[type]
   const metaItems = []
-  if (isMovie) metaItems.push('Film')
+  if (typeBadge) metaItems.push(typeBadge)
   const startYear = yearOf(d.first_air_date)
   const endYear = yearOf(d.last_air_date)
   if (startYear) {
@@ -231,7 +247,10 @@ function SeriesDetail() {
   if (d.status) metaItems.push(TMDB_STATUS_LABELS[d.status] ?? d.status)
   if (d.number_of_seasons)
     metaItems.push(`${d.number_of_seasons} stagion${d.number_of_seasons === 1 ? 'e' : 'i'}`)
-  if (d.number_of_episodes) metaItems.push(`${d.number_of_episodes} episodi`)
+  if (d.number_of_episodes) metaItems.push(`${d.number_of_episodes} ${unitLabel(type)}`)
+  if (d.volumes) metaItems.push(`${d.volumes} volumi`)
+  if (d.chapters && !showUnits) metaItems.push(`${d.chapters} capitoli`)
+  if (d.page_count) metaItems.push(`${d.page_count} pagine`)
   if (d.episode_run_time)
     metaItems.push(isMovie ? `${d.episode_run_time} min` : `~${d.episode_run_time} min/ep`)
 
@@ -273,9 +292,9 @@ function SeriesDetail() {
             </p>
           ) : null}
 
-          {d.created_by?.length > 0 && (
+          {credit && (
             <p className="hint">
-              <strong>Creata da:</strong> {d.created_by.join(', ')}
+              <strong>{creditLabel}:</strong> {credit}
             </p>
           )}
 
@@ -442,17 +461,24 @@ function SeriesDetail() {
         </section>
       )}
 
-      {!isMovie && (
-      <section className="episodes-section">
-        <h2>Episodi</h2>
+      {showProgress && (
+        <section className="progress-section">
+          <h2>Progresso di lettura</h2>
+          <ProgressTracker series={series} onChange={handleProgressChange} />
+        </section>
+      )}
 
-        {series.tmdb_id == null && (
-          <p className="hint">Serie non collegata a TMDB: tracciamento episodi non disponibile.</p>
+      {showUnits && (
+      <section className="episodes-section">
+        <h2>{unitsTitle}</h2>
+
+        {series.external_id == null && (
+          <p className="hint">Titolo non collegato alla sorgente: tracciamento non disponibile.</p>
         )}
 
-        {series.tmdb_id != null && seasons.length === 0 && (
+        {series.external_id != null && seasons.length === 0 && (
           <button type="button" onClick={handleSync} disabled={syncing}>
-            {syncing ? 'Sincronizzo…' : 'Sincronizza episodi da TMDB'}
+            {syncing ? 'Sincronizzo…' : `Sincronizza ${unitLabel(type)}`}
           </button>
         )}
 
@@ -535,11 +561,11 @@ function SeriesDetail() {
 
       {recommendations.length > 0 && (
         <section className="recommendations-section">
-          <h2>{isMovie ? 'Film consigliati' : 'Serie consigliate'}</h2>
+          <h2>Consigliati simili</h2>
           <div className="recommendations-row">
             {recommendations.map((rec) => (
               <button
-                key={rec.tmdb_id}
+                key={`${rec.source}-${rec.external_id}`}
                 type="button"
                 className="rec-card"
                 onClick={() => handleAddRecommendation(rec)}

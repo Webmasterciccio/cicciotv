@@ -11,8 +11,10 @@ class SeriesBase(BaseModel):
     """Campi comuni, tutti opzionali tranne dove indicato."""
 
     title: str = Field(..., min_length=1, description="Titolo della serie")
-    media_type: str = Field(default="tv", description="Tipo: 'tv' o 'movie'")
-    status: Status = Field(default=Status.da_vedere, description="Stato di visione")
+    media_type: str = Field(default="tv", description="tv, movie, anime, manga, book, comic")
+    source: str = Field(default="tmdb", description="Sorgente: tmdb, jikan, googlebooks, comicvine")
+    external_id: Optional[str] = Field(default=None, description="Id presso la sorgente (stringa)")
+    status: Status = Field(default=Status.da_vedere, description="Stato di visione/lettura")
     rating: Optional[int] = Field(default=None, ge=1, le=10, description="Voto da 1 a 10")
     notes: Optional[str] = None
     runtime: Optional[int] = Field(default=None, ge=0, description="Durata in minuti (film)")
@@ -23,6 +25,10 @@ class SeriesBase(BaseModel):
     total_seasons: Optional[int] = Field(default=None, ge=0)
     current_season: Optional[int] = Field(default=None, ge=0)
     current_episode: Optional[int] = Field(default=None, ge=0)
+
+    # Progresso generico (manga: capitoli, libri: pagine).
+    progress_current: Optional[int] = Field(default=None, ge=0)
+    progress_total: Optional[int] = Field(default=None, ge=0)
 
     tmdb_id: Optional[int] = None
     poster_url: Optional[str] = None
@@ -43,6 +49,8 @@ class SeriesUpdate(BaseModel):
     total_seasons: Optional[int] = Field(default=None, ge=0)
     current_season: Optional[int] = Field(default=None, ge=0)
     current_episode: Optional[int] = Field(default=None, ge=0)
+    progress_current: Optional[int] = Field(default=None, ge=0)
+    progress_total: Optional[int] = Field(default=None, ge=0)
 
     tmdb_id: Optional[int] = None
     poster_url: Optional[str] = None
@@ -62,15 +70,19 @@ class SeriesRead(SeriesBase):
     finished_at: Optional[datetime] = None
 
 
-class TmdbSearchResult(BaseModel):
-    """Un risultato di ricerca da TMDB (non ancora salvato in libreria)."""
+class SearchResult(BaseModel):
+    """Un risultato di ricerca da una qualsiasi sorgente (non ancora in libreria)."""
 
-    tmdb_id: int
+    source: str = "tmdb"
+    external_id: Optional[str] = None
     media_type: str = "tv"
     title: Optional[str] = None
     overview: Optional[str] = None
     first_air_date: Optional[str] = None
     poster_url: Optional[str] = None
+    vote_average: Optional[float] = None
+    authors: list[str] = Field(default_factory=list)
+    genres: list[str] = Field(default_factory=list)
 
 
 class EpisodeRead(BaseModel):
@@ -132,8 +144,20 @@ class TmdbSeason(BaseModel):
     vote_average: Optional[float] = None
 
 
-class TmdbDetails(BaseModel):
-    """Tutte le informazioni disponibili di una serie su TMDB."""
+class MediaDetails(BaseModel):
+    """Informazioni estese di un titolo, comuni a tutte le sorgenti (i campi non
+    pertinenti restano vuoti)."""
+
+    source: Optional[str] = None
+    external_id: Optional[str] = None
+    media_type: Optional[str] = None
+    # Campi specifici delle sorgenti non-TMDB.
+    authors: list[str] = Field(default_factory=list)
+    studio: Optional[str] = None
+    publisher: Optional[str] = None
+    chapters: Optional[int] = None
+    volumes: Optional[int] = None
+    page_count: Optional[int] = None
 
     tmdb_id: Optional[int] = None
     title: Optional[str] = None
@@ -160,10 +184,12 @@ class TmdbDetails(BaseModel):
     seasons: list[TmdbSeason] = Field(default_factory=list)
 
 
-class TmdbRecommendation(BaseModel):
-    """Una serie consigliata/simile (non ancora in libreria)."""
+class Recommendation(BaseModel):
+    """Un titolo consigliato/simile (non ancora in libreria), da qualsiasi sorgente."""
 
-    tmdb_id: int
+    source: str = "tmdb"
+    external_id: Optional[str] = None
+    media_type: str = "tv"
     title: Optional[str] = None
     poster_url: Optional[str] = None
     vote_average: Optional[float] = None
@@ -173,11 +199,24 @@ class TmdbRecommendation(BaseModel):
     reason: Optional[str] = None  # es. "Perché hai visto «Dark»"
 
 
+_MEDIA_TYPE_PATTERN = "^(tv|movie|anime|manga|book|comic)$"
+
+
 class DismissRequest(BaseModel):
     """Payload per scartare un consiglio ('non mi interessa')."""
 
-    tmdb_id: int
-    media_type: str = Field(default="tv", pattern="^(tv|movie)$")
+    external_id: str
+    source: str = "tmdb"
+    media_type: str = Field(default="tv", pattern=_MEDIA_TYPE_PATTERN)
+
+
+class ImportRequest(BaseModel):
+    """Payload per importare un titolo (di qualsiasi sorgente) in libreria."""
+
+    source: str = "tmdb"
+    external_id: str
+    media_type: str = Field(default="tv", pattern=_MEDIA_TYPE_PATTERN)
+    status: Status = Status.da_vedere
 
 
 class Genre(BaseModel):
@@ -186,10 +225,15 @@ class Genre(BaseModel):
 
 
 class SettingsRead(BaseModel):
-    """Preferenze dell'utente (generi preferiti separati per tipo)."""
+    """Preferenze dell'utente (generi preferiti separati per tipo).
+
+    Solo i tipi con un elenco di generi a id numerici: tv/movie (TMDB) e
+    anime/manga (Jikan). Libri e fumetti non hanno preferenze di genere."""
 
     preferred_genres_tv: list[int] = Field(default_factory=list)
     preferred_genres_movie: list[int] = Field(default_factory=list)
+    preferred_genres_anime: list[int] = Field(default_factory=list)
+    preferred_genres_manga: list[int] = Field(default_factory=list)
 
 
 class SettingsUpdate(BaseModel):
@@ -197,6 +241,8 @@ class SettingsUpdate(BaseModel):
 
     preferred_genres_tv: Optional[list[int]] = None
     preferred_genres_movie: Optional[list[int]] = None
+    preferred_genres_anime: Optional[list[int]] = None
+    preferred_genres_manga: Optional[list[int]] = None
 
 
 class LoginRequest(BaseModel):
@@ -283,6 +329,17 @@ class MovieStats(BaseModel):
     this_month: MovieThisMonth
 
 
+class TypeStat(BaseModel):
+    """Riepilogo per un tipo di media (serie, film, anime, manga, libri, fumetti)."""
+
+    media_type: str
+    total: int
+    to_watch: int
+    in_progress: int
+    completed: int
+    average_rating: Optional[float] = None
+
+
 class Stats(BaseModel):
     """Statistiche della libreria."""
 
@@ -301,3 +358,4 @@ class Stats(BaseModel):
     movies: MovieStats
     watch_insights: list[str] = Field(default_factory=list)
     episodes_by_weekday: list[WeekdayCount] = Field(default_factory=list)
+    by_type: list[TypeStat] = Field(default_factory=list)

@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from .. import auth, crud, models, schemas, tmdb_client
+from .. import auth, catalog, crud, models, schemas, tmdb_client
 from ..database import get_db
 from ..models import Status
 
@@ -84,27 +84,26 @@ def watch_providers(
     db: Session = Depends(get_db),
     user: models.User = Depends(auth.get_current_user),
 ):
-    """Servizi su cui e' possibile guardare la serie (fonte: TMDB, regione IT)."""
+    """Servizi su cui e' possibile guardare la serie (fonte: TMDB, regione IT).
+    Disponibile solo per serie/film; per gli altri tipi restituisce vuoto."""
     series = _get_series_or_404(db, series_id, user.id)
-    if series.tmdb_id is None:
+    if series.source != "tmdb" or series.tmdb_id is None:
         return schemas.WatchProviders()
     return tmdb_client.get_watch_providers(series.tmdb_id, media_type=series.media_type)
 
 
-@router.get("/{series_id}/tmdb", response_model=schemas.TmdbDetails)
-def tmdb_details(
+@router.get("/{series_id}/details", response_model=schemas.MediaDetails)
+def media_details(
     series_id: int,
     db: Session = Depends(get_db),
     user: models.User = Depends(auth.get_current_user),
 ):
-    """Tutte le informazioni disponibili della serie su TMDB (trama, generi, cast, ...)."""
+    """Informazioni estese del titolo dalla sua sorgente (trama, generi, autori,
+    cast, stagioni/numeri, ecc.)."""
     series = _get_series_or_404(db, series_id, user.id)
-    if series.tmdb_id is None:
-        return schemas.TmdbDetails()
-    if series.media_type == "movie":
-        details = tmdb_client.get_movie_extended(series.tmdb_id)
-    else:
-        details = tmdb_client.get_tv_extended(series.tmdb_id)
+    if not series.external_id:
+        return schemas.MediaDetails()
+    details = catalog.get_details(series.media_type, series.source, series.external_id)
 
     # Backfill dei generi (per le statistiche/insight) se mancanti in libreria.
     if not series.genres and details.get("genres"):
@@ -114,17 +113,17 @@ def tmdb_details(
     return details
 
 
-@router.get("/{series_id}/recommendations", response_model=list[schemas.TmdbRecommendation])
+@router.get("/{series_id}/recommendations", response_model=list[schemas.Recommendation])
 def recommendations(
     series_id: int,
     db: Session = Depends(get_db),
     user: models.User = Depends(auth.get_current_user),
 ):
-    """Serie consigliate/simili a partire da questa (fonte: TMDB)."""
+    """Titoli consigliati/simili a partire da questo (dalla stessa sorgente)."""
     series = _get_series_or_404(db, series_id, user.id)
-    if series.tmdb_id is None:
+    if not series.external_id:
         return []
-    return tmdb_client.get_recommendations(series.tmdb_id, media_type=series.media_type)
+    return catalog.get_recommendations(series.media_type, series.source, series.external_id)
 
 
 @router.get("/{series_id}/episodes", response_model=list[schemas.EpisodeRead])
@@ -144,8 +143,19 @@ def sync_episodes(
     db: Session = Depends(get_db),
     user: models.User = Depends(auth.get_current_user),
 ):
-    """(Ri)scarica da TMDB l'elenco degli episodi di tutte le stagioni. Preserva quelli gia' segnati come visti."""
+    """(Ri)scarica le unita' del titolo (episodi anime, numeri fumetti, o episodi
+    per stagione delle serie TV). Preserva quelle gia' segnate come viste."""
     series = _get_series_or_404(db, series_id, user.id)
+
+    # Anime (Jikan) e fumetti (Comic Vine): lista piatta di unita' dal dispatcher.
+    if series.media_type in ("anime", "comic"):
+        if not series.external_id:
+            raise HTTPException(status_code=400, detail="Titolo non collegato alla sorgente")
+        units = catalog.get_units(series.media_type, series.external_id)
+        crud.sync_episodes(db, series_id, units)
+        return crud.list_episodes(db, series_id)
+
+    # Serie TV (TMDB): episodi per stagione.
     if series.tmdb_id is None:
         raise HTTPException(
             status_code=400,

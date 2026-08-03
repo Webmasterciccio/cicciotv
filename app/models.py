@@ -39,7 +39,15 @@ class Series(Base):
     # (le serie preesistenti vengono assegnate all'admin all'avvio).
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
-    # Tipo di media: "tv" (serie) o "movie" (film)
+    # Sorgente esterna del titolo (multi-API): "tmdb" (serie/film),
+    # "jikan" (anime/manga), "googlebooks" (libri), "comicvine" (fumetti).
+    source = Column(String, nullable=False, default="tmdb", index=True)
+
+    # Identificativo presso la sorgente. E' una stringa perche' alcune API
+    # (Google Books) usano id non numerici; per TMDB vale str(tmdb_id).
+    external_id = Column(String, nullable=True, index=True)
+
+    # Tipo di media: "tv", "movie", "anime", "manga", "book", "comic".
     media_type = Column(String, nullable=False, default="tv", index=True)
 
     # Dati principali
@@ -58,6 +66,11 @@ class Series(Base):
     total_seasons = Column(Integer, nullable=True)
     current_season = Column(Integer, nullable=True)
     current_episode = Column(Integer, nullable=True)
+
+    # Progresso generico per i tipi senza episodi tracciati uno a uno:
+    # manga (capitoli letti / totali) e libri (pagine lette / totali).
+    progress_current = Column(Integer, nullable=True)
+    progress_total = Column(Integer, nullable=True)
 
     # Campi predisposti per l'integrazione futura con TMDB
     tmdb_id = Column(Integer, nullable=True, index=True)
@@ -94,13 +107,17 @@ class UserSetting(Base):
 
 
 class Dismissal(Base):
-    """Consiglio scartato dall'utente ('non mi interessa'): non verra' piu' mostrato."""
+    """Consiglio scartato dall'utente ('non mi interessa'): non verra' piu' mostrato.
+
+    Chiave per sorgente: external_id e' una stringa (come su Series) cosi' vale
+    per tutte le API, non solo per gli id numerici di TMDB."""
 
     __tablename__ = "dismissals"
 
     user_id = Column(Integer, ForeignKey("users.id"), primary_key=True)
-    media_type = Column(String, primary_key=True)  # "tv" o "movie"
-    tmdb_id = Column(Integer, primary_key=True)
+    media_type = Column(String, primary_key=True)  # tv/movie/anime/manga/book/comic
+    source = Column(String, primary_key=True, default="tmdb")
+    external_id = Column(String, primary_key=True)
 
 
 class User(Base):

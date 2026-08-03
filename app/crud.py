@@ -9,8 +9,8 @@ from . import models, schemas
 from .models import Status
 
 
-# Tipi che hanno un elenco di generi a id numerici (TMDB e Jikan).
-_GENRE_TYPES = ("tv", "movie", "anime", "manga")
+# Tipi che hanno un elenco di generi a id numerici (TMDB e AniList).
+_GENRE_TYPES = ("tv", "movie", "manga")
 
 
 def _preferred_genres_key(media_type: str) -> str:
@@ -493,7 +493,7 @@ def compute_stats(db: Session, user_id: int) -> dict:
 
     # Panoramica per tipo (tutti i tipi presenti in libreria).
     by_type = []
-    for t in ("tv", "movie", "anime", "manga", "book", "comic"):
+    for t in ("tv", "movie", "manga", "book", "comic"):
         items = [s for s in all_media if s.media_type == t]
         if not items:
             continue

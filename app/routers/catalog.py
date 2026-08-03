@@ -13,12 +13,12 @@ router = APIRouter(prefix="/catalog", tags=["catalog"])
 
 MediaType = Query(
     default="tv",
-    pattern="^(tv|movie|anime|manga|book|comic)$",
-    description="tv, movie, anime, manga, book, comic",
+    pattern="^(tv|movie|manga|book|comic)$",
+    description="tv, movie, manga, book, comic",
 )
 
 # Tipi che si "guardano" (verbo dei consigli) vs quelli che si "leggono".
-_WATCH_TYPES = {"tv", "movie", "anime"}
+_WATCH_TYPES = {"tv", "movie"}
 
 
 def _reason_verb(media_type: str) -> str:

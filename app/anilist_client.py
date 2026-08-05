@@ -251,7 +251,7 @@ def get_episodes(external_id: str) -> list[dict[str, Any]]:
 
 
 _RECS_QUERY = """
-query ($id: Int, $type: MediaType) {
+query ($id: Int) {
   Media(id: $id) {
     recommendations(perPage: 12, sort: RATING_DESC) {
       nodes {
@@ -268,7 +268,7 @@ query ($id: Int, $type: MediaType) {
 
 def get_recommendations(media_type: str, external_id: str) -> list[dict[str, Any]]:
     """Anime/manga consigliati a partire da un titolo."""
-    data = _query(_RECS_QUERY, {"id": int(external_id), "type": _type_of(media_type)})
+    data = _query(_RECS_QUERY, {"id": int(external_id)})
     nodes = ((data.get("Media") or {}).get("recommendations") or {}).get("nodes") or []
     results = []
     for n in nodes:

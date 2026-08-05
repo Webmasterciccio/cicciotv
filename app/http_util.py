@@ -6,6 +6,7 @@ Fornisce un GET JSON con:
 - un throttle opzionale per-servizio (intervallo minimo tra due chiamate);
 - gestione uniforme degli errori come HTTPException (come tmdb_client).
 """
+import logging
 import re
 import threading
 import time
@@ -13,6 +14,8 @@ from typing import Any, Optional
 
 import httpx
 from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_TTL = 600  # 10 minuti: i cataloghi esterni cambiano di rado
 _TAG_RE = re.compile(r"<[^>]+>")
@@ -63,6 +66,17 @@ def _throttle(service: str, min_interval: float) -> None:
         _last_call[service] = time.monotonic()
 
 
+def _log_error_body(service: str, response: httpx.Response, *, not_found_ok: bool = False) -> None:
+    """Logga il corpo delle risposte di errore delle API esterne: i messaggi
+    verso il frontend restano generici, ma cosi' il problema resta
+    diagnosticabile nei log invece di sparire del tutto."""
+    if response.status_code == 404 and not_found_ok:
+        return  # non trovato atteso (es. lookup opzionale), non un guasto
+    logger.warning(
+        "%s ha risposto %s: %s", service, response.status_code, response.text[:500]
+    )
+
+
 def get_json(
     url: str,
     params: Optional[dict] = None,
@@ -107,6 +121,8 @@ def get_json(
             continue
         break
 
+    if response.status_code >= 400:
+        _log_error_body(service, response, not_found_ok=not_found_ok)
     if response.status_code == 404:
         if not_found_ok:
             return None
@@ -167,6 +183,8 @@ def post_json(
             continue
         break
 
+    if response.status_code >= 400:
+        _log_error_body(service, response)
     if response.status_code == 429:
         raise HTTPException(
             status_code=503,

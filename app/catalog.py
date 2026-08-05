@@ -17,7 +17,6 @@ risultato, cosi' il resto dell'app vede sempre e solo "tv".
 """
 import difflib
 import re
-from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -118,42 +117,19 @@ def _rank(results: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
 
 
 def _search_tv(query: str, page: int) -> list[dict[str, Any]]:
-    """Cerca serie/anime su TMDB e AniList in parallelo e unisce i risultati,
-    deduplicando gli anime gia' presenti su TMDB (per titolo normalizzato). Se
-    una sola sorgente fallisce si usano comunque i risultati dell'altra;
-    l'errore si propaga solo se falliscono entrambe."""
-    with ThreadPoolExecutor(max_workers=2) as pool:
-        tmdb_future = pool.submit(tmdb_client.search, query, "tv", page)
-        anilist_future = pool.submit(anilist_client.search, query, "anime", page)
+    """Cerca serie/anime: prova TMDB, e ripiega su AniList se TMDB non trova
+    nulla o ha un problema transitorio (i dati di AniList - lingua, scala voto,
+    date - non sono allineabili a TMDB, quindi si mostrano solo quando serve
+    davvero, non insieme)."""
+    try:
+        tmdb_results = tmdb_client.search(query, "tv", page)
+    except HTTPException:
+        tmdb_results = None
 
-        tmdb_results: list[dict[str, Any]] = []
-        tmdb_error: Optional[HTTPException] = None
-        try:
-            tmdb_results = tmdb_future.result()
-        except HTTPException as exc:
-            tmdb_error = exc
+    if tmdb_results:
+        return [_tmdb_card(it, "tv") for it in tmdb_results]
 
-        anilist_results: list[dict[str, Any]] = []
-        anilist_error: Optional[HTTPException] = None
-        try:
-            anilist_results = anilist_future.result()
-        except HTTPException as exc:
-            anilist_error = exc
-
-    if tmdb_error is not None and anilist_error is not None:
-        raise tmdb_error
-
-    cards = [_tmdb_card(it, "tv") for it in tmdb_results]
-    seen_titles = {_norm_text(c["title"]) for c in cards if c.get("title")}
-    for it in anilist_results:
-        card = _card(it, "tv")
-        norm = _norm_text(card.get("title"))
-        if norm and norm in seen_titles:
-            continue
-        if norm:
-            seen_titles.add(norm)
-        cards.append(card)
-    return cards
+    return [_card(it, "tv") for it in anilist_client.search(query, "anime", page)]
 
 
 def search(query: str, media_type: str, page: int = 1) -> list[dict[str, Any]]:
@@ -341,7 +317,15 @@ def build_import(media_type: str, source: str, external_id: str) -> tuple[schema
         genres=genres,
         progress_total=progress_total,
     )
-    units = get_units(media_type, source, external_id) if has_units(media_type) else []
+    units: list[dict] = []
+    if has_units(media_type):
+        try:
+            units = get_units(media_type, source, external_id)
+        except HTTPException:
+            # Un guasto transitorio nel recupero di episodi/numeri non deve
+            # bloccare l'aggiunta alla libreria: si importa comunque il
+            # titolo, gli episodi si recuperano poi con "Sincronizza".
+            units = []
     return payload, units
 
 

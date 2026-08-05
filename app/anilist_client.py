@@ -47,9 +47,18 @@ def _title(m: dict) -> Optional[str]:
 
 
 def _date(d: Optional[dict]) -> Optional[str]:
+    """Data nel formato piu' preciso disponibile, senza inventare giorno/mese
+    quando AniList conosce solo l'anno (o l'anno e il mese)."""
     if not d or not d.get("year"):
         return None
-    return f"{d['year']:04d}-{(d.get('month') or 1):02d}-{(d.get('day') or 1):02d}"
+    year = f"{d['year']:04d}"
+    month = d.get("month")
+    if not month:
+        return year
+    day = d.get("day")
+    if not day:
+        return f"{year}-{month:02d}"
+    return f"{year}-{month:02d}-{day:02d}"
 
 
 def _score(m: dict) -> Optional[float]:

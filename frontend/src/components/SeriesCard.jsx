@@ -2,6 +2,13 @@ import { Link } from 'react-router-dom'
 import Poster from './Poster.jsx'
 import { hasProgress, labelOf, unitLabel } from '../mediaMeta.js'
 
+function nextEpisodeLabel(days) {
+  if (days == null) return 'In pari'
+  if (days <= 0) return 'Nuovo episodio disponibile'
+  if (days === 1) return 'Prossimo domani'
+  return `Prossimo tra ${days} g.`
+}
+
 function SeriesCard({ series }) {
   const type = series.media_type || 'tv'
   const badge = type === 'tv' ? null : labelOf(type)
@@ -16,6 +23,8 @@ function SeriesCard({ series }) {
         {series.progress_current || 0}/{series.progress_total} {unitLabel(type)}
       </span>
     )
+  } else if (type === 'tv' && series.status === 'in_corso' && series.caught_up) {
+    meta = <span>{nextEpisodeLabel(series.next_episode_days)}</span>
   } else if (type === 'tv' && series.status === 'in_corso' && series.current_season != null) {
     meta = (
       <span>

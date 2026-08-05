@@ -6,6 +6,7 @@ spesso irraggiungibile). Stessa interfaccia pubblica di jikan_client.py, cosi'
 il dispatcher (app/catalog.py) puo' scambiarli senza toccare il resto.
 """
 import re
+from datetime import datetime, timezone
 from typing import Any, Optional
 
 from . import http_util
@@ -248,6 +249,27 @@ def get_episodes(external_id: str) -> list[dict[str, Any]]:
             for i in range(1, total + 1)
         ]
     return []
+
+
+_NEXT_AIRING_QUERY = """
+query ($id: Int) {
+  Media(id: $id) {
+    nextAiringEpisode { episode airingAt }
+  }
+}
+"""
+
+
+def get_next_airing(external_id: str) -> Optional[dict[str, Any]]:
+    """Prossimo episodio programmato (numero + data), se la serie e' ancora in
+    onda e AniList lo sa gia'. AniList non conserva le date di tutti gli
+    episodi passati (vedi get_episodes), ma calcola questa in tempo reale."""
+    data = _query(_NEXT_AIRING_QUERY, {"id": int(external_id)})
+    next_ep = (data.get("Media") or {}).get("nextAiringEpisode")
+    if not next_ep or not next_ep.get("airingAt"):
+        return None
+    air_date = datetime.fromtimestamp(next_ep["airingAt"], tz=timezone.utc).date().isoformat()
+    return {"episode": next_ep.get("episode"), "air_date": air_date}
 
 
 _RECS_QUERY = """

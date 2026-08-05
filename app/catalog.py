@@ -316,6 +316,7 @@ def build_import(media_type: str, source: str, external_id: str) -> tuple[schema
         poster_url=details.get("poster_url"),
         genres=genres,
         progress_total=progress_total,
+        still_airing=details.get("in_production"),
     )
     units: list[dict] = []
     if has_units(media_type):
@@ -355,6 +356,7 @@ def _build_tmdb_import(media_type: str, external_id: str) -> tuple[schemas.Serie
         total_seasons=details["total_seasons"],
         poster_url=details["poster_url"],
         genres=",".join(details.get("genres") or []) or None,
+        still_airing=details.get("in_production"),
     )
     # Le serie TV scaricano gli episodi per stagione (percorso TMDB dedicato).
     units: list[dict] = []

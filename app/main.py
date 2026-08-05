@@ -49,6 +49,8 @@ def _add_missing_columns() -> None:
             "external_id": "VARCHAR",
             "progress_current": "INTEGER",
             "progress_total": "INTEGER",
+            "still_airing": "BOOLEAN",
+            "episodes_synced_at": "DATETIME",
         },
         "users": {
             "is_admin": "BOOLEAN DEFAULT 0",

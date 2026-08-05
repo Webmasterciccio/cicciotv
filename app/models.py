@@ -77,6 +77,14 @@ class Series(Base):
     poster_url = Column(String, nullable=True)
     genres = Column(Text, nullable=True)  # generi TMDB separati da virgola
 
+    # La fonte segnala il titolo ancora in produzione/uscita (NULL = sconosciuto,
+    # es. righe precedenti a questo campo): usato per distinguere "in pari"
+    # (in_corso, visto tutto il rilasciato) da "vista" (conclusa per sempre).
+    still_airing = Column(Boolean, nullable=True)
+    # Ultima sincronizzazione degli episodi (manuale o automatica), per il
+    # throttling del refresh automatico in GET /series.
+    episodes_synced_at = Column(DateTime, nullable=True)
+
     # Timestamp gestiti automaticamente
     created_at = Column(DateTime, default=_now)
     updated_at = Column(DateTime, default=_now, onupdate=_now)

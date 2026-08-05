@@ -1,14 +1,21 @@
 """Endpoint REST per la gestione delle serie TV (per-utente)."""
+from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from .. import auth, catalog, crud, models, schemas, tmdb_client
+from .. import anilist_client, auth, catalog, crud, models, schemas, tmdb_client
 from ..database import get_db
 from ..models import Status
 
 router = APIRouter(prefix="/series", tags=["series"])
+
+# Refresh automatico (throttled) delle serie tv in_corso quando si apre la
+# libreria: al massimo N per richiesta, non piu' spesso di ogni INTERVALLO,
+# per limitare la latenza aggiunta e le chiamate alle fonti esterne.
+_AUTO_REFRESH_MAX = 3
+_AUTO_REFRESH_INTERVAL = timedelta(hours=12)
 
 
 @router.post("", response_model=schemas.SeriesRead, status_code=status.HTTP_201_CREATED)
@@ -34,7 +41,54 @@ def list_series(
     user: models.User = Depends(auth.get_current_user),
 ):
     """Elenca le serie dell'utente, opzionalmente filtrate per stato."""
-    return crud.list_series(db, user_id=user.id, status=status_filter, skip=skip, limit=limit)
+    series_list = crud.list_series(db, user_id=user.id, status=status_filter, skip=skip, limit=limit)
+    _enrich_tv_progress(db, series_list)
+    return series_list
+
+
+def _enrich_tv_progress(db: Session, series_list: list[models.Series]) -> None:
+    """Per le serie tv in_corso: risincronizza quelle piu' 'stale' (poche per
+    richiesta, per limitare la latenza) e calcola 'in pari' + giorni al
+    prossimo episodio. Un guasto di una fonte esterna non deve far fallire
+    tutta la libreria: si salta semplicemente quella serie."""
+    tv_in_corso = [s for s in series_list if s.media_type == "tv" and s.status == Status.in_corso]
+    if not tv_in_corso:
+        return
+
+    now = datetime.now(timezone.utc)
+    refreshed = 0
+    for s in tv_in_corso:
+        if refreshed >= _AUTO_REFRESH_MAX:
+            break
+        synced_at = s.episodes_synced_at
+        if synced_at is not None and synced_at.tzinfo is None:
+            synced_at = synced_at.replace(tzinfo=timezone.utc)  # SQLite: niente fuso
+        if synced_at is not None and now - synced_at <= _AUTO_REFRESH_INTERVAL:
+            continue
+        try:
+            _sync_series_units(db, s)
+        except HTTPException:
+            pass
+        refreshed += 1
+
+    progress = crud.get_tv_watch_progress(db, [s.id for s in tv_in_corso])
+    today = now.date()
+    for s in tv_in_corso:
+        info = progress.get(s.id)
+        if not info:
+            continue
+        s.caught_up = info["caught_up"]
+        next_date = info["next_episode_air_date"]
+        if not next_date and info["caught_up"] and s.source == "anilist" and s.external_id:
+            try:
+                next_airing = anilist_client.get_next_airing(s.external_id)
+            except HTTPException:
+                next_airing = None
+            if next_airing:
+                next_date = next_airing["air_date"]
+        s.next_episode_air_date = next_date
+        if next_date:
+            s.next_episode_days = (date.fromisoformat(next_date) - today).days
 
 
 def _get_series_or_404(db: Session, series_id: int, user_id: int) -> models.Series:
@@ -42,6 +96,43 @@ def _get_series_or_404(db: Session, series_id: int, user_id: int) -> models.Seri
     if series is None:
         raise HTTPException(status_code=404, detail="Serie non trovata")
     return series
+
+
+def _sync_series_units(db: Session, series: models.Series) -> None:
+    """(Ri)scarica le unita' del titolo: episodi (serie TV, anche da AniList/
+    Jikan quando il titolo non e' su TMDB) o numeri (fumetti). Preserva quelle
+    gia' segnate come viste. Per le serie tv aggiorna anche still_airing (la
+    fonte dice se e' ancora in produzione), usato per distinguere "in pari" da
+    "vista" e per il refresh automatico throttled di GET /series."""
+    # Fumetti (Comic Vine) o serie TV non-TMDB (AniList/Jikan, ex sezione
+    # anime): lista piatta di unita' dal dispatcher.
+    if series.media_type == "comic" or (series.media_type == "tv" and series.source != "tmdb"):
+        if not series.external_id:
+            raise HTTPException(status_code=400, detail="Titolo non collegato alla sorgente")
+        units = catalog.get_units(series.media_type, series.source, series.external_id)
+        crud.sync_episodes(db, series.id, units)
+        if series.media_type == "tv":
+            details = catalog.get_details(series.media_type, series.source, series.external_id)
+            series.still_airing = details.get("in_production")
+            db.commit()
+        return
+
+    # Serie TV (TMDB): episodi per stagione.
+    if series.tmdb_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Serie non collegata a TMDB: sincronizzazione episodi non disponibile",
+        )
+    if not series.total_seasons:
+        raise HTTPException(status_code=400, detail="Numero di stagioni sconosciuto")
+
+    all_episodes = []
+    for season_number in range(1, series.total_seasons + 1):
+        all_episodes.extend(tmdb_client.get_season_episodes(series.tmdb_id, season_number))
+    crud.sync_episodes(db, series.id, all_episodes)
+    details = tmdb_client.get_tv_details(series.tmdb_id)
+    series.still_airing = details.get("in_production")
+    db.commit()
 
 
 @router.get("/{series_id}", response_model=schemas.SeriesRead)
@@ -147,29 +238,7 @@ def sync_episodes(
     Jikan quando il titolo non e' su TMDB) o numeri (fumetti). Preserva quelle
     gia' segnate come viste."""
     series = _get_series_or_404(db, series_id, user.id)
-
-    # Fumetti (Comic Vine) o serie TV non-TMDB (AniList/Jikan, ex sezione
-    # anime): lista piatta di unita' dal dispatcher.
-    if series.media_type == "comic" or (series.media_type == "tv" and series.source != "tmdb"):
-        if not series.external_id:
-            raise HTTPException(status_code=400, detail="Titolo non collegato alla sorgente")
-        units = catalog.get_units(series.media_type, series.source, series.external_id)
-        crud.sync_episodes(db, series_id, units)
-        return crud.list_episodes(db, series_id)
-
-    # Serie TV (TMDB): episodi per stagione.
-    if series.tmdb_id is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Serie non collegata a TMDB: sincronizzazione episodi non disponibile",
-        )
-    if not series.total_seasons:
-        raise HTTPException(status_code=400, detail="Numero di stagioni sconosciuto")
-
-    all_episodes = []
-    for season_number in range(1, series.total_seasons + 1):
-        all_episodes.extend(tmdb_client.get_season_episodes(series.tmdb_id, season_number))
-    crud.sync_episodes(db, series_id, all_episodes)
+    _sync_series_units(db, series)
     return crud.list_episodes(db, series_id)
 
 

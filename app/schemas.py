@@ -34,6 +34,10 @@ class SeriesBase(BaseModel):
 
     tmdb_id: Optional[int] = None
     poster_url: Optional[str] = None
+    genres: Optional[str] = None
+    still_airing: Optional[bool] = Field(
+        default=None, description="La fonte segnala il titolo ancora in produzione/uscita"
+    )
 
 
 class SeriesCreate(SeriesBase):
@@ -70,6 +74,12 @@ class SeriesRead(SeriesBase):
     updated_at: datetime
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
+
+    # Calcolati al volo per le serie tv in_corso (None per tutte le altre):
+    # "in pari" = nessun episodio uscito rimasto da vedere.
+    caught_up: Optional[bool] = None
+    next_episode_air_date: Optional[str] = None
+    next_episode_days: Optional[int] = None
 
 
 class SearchResult(BaseModel):

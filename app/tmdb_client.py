@@ -80,6 +80,7 @@ def get_tv_details(tmdb_id: int) -> dict[str, Any]:
         "total_seasons": data.get("number_of_seasons"),
         "poster_url": _poster_url(data.get("poster_path")),
         "genres": [g["name"] for g in data.get("genres", []) if g.get("name")],
+        "in_production": data.get("in_production"),
     }
 
 

@@ -146,6 +146,38 @@ def list_episodes(db: Session, series_id: int) -> list[models.Episode]:
     )
 
 
+def get_tv_watch_progress(db: Session, series_ids: list[int]) -> dict[int, dict]:
+    """Per ogni serie, se e' 'in pari' (nessun episodio gia' uscito rimasto da
+    vedere: gli episodi futuri noti non contano contro l'utente) e la data del
+    prossimo episodio non ancora uscito, se nota. Solo per serie con almeno un
+    episodio sincronizzato (altrimenti 'in pari' non e' significativo)."""
+    if not series_ids:
+        return {}
+    today = _now().date().isoformat()
+    episodes = (
+        db.query(models.Episode)
+        .filter(models.Episode.series_id.in_(series_ids))
+        .all()
+    )
+    by_series: dict[int, list[models.Episode]] = {}
+    for ep in episodes:
+        by_series.setdefault(ep.series_id, []).append(ep)
+
+    result: dict[int, dict] = {}
+    for series_id, eps in by_series.items():
+        unwatched_released = [
+            e for e in eps if not e.watched and (not e.air_date or e.air_date <= today)
+        ]
+        future_dates = sorted(
+            e.air_date for e in eps if not e.watched and e.air_date and e.air_date > today
+        )
+        result[series_id] = {
+            "caught_up": len(unwatched_released) == 0,
+            "next_episode_air_date": future_dates[0] if future_dates else None,
+        }
+    return result
+
+
 def get_episode(db: Session, series_id: int, episode_id: int) -> Optional[models.Episode]:
     return (
         db.query(models.Episode)
@@ -177,6 +209,9 @@ def sync_episodes(db: Session, series_id: int, episodes_data: list[dict]) -> Non
                     **{f: data.get(f) for f in detail_fields},
                 )
             )
+    db.query(models.Series).filter(models.Series.id == series_id).update(
+        {"episodes_synced_at": _now()}
+    )
     db.commit()
 
 
@@ -609,7 +644,12 @@ def _recompute_series_progress(db: Session, series: models.Series) -> None:
         series.current_episode = latest.episode_number
 
         if len(watched_episodes) == len(episodes):
-            series.status = Status.vista
+            # Se la fonte dice che e' ancora in produzione, "visto tutto il
+            # rilasciato finora" non vuol dire "conclusa": resta in_corso
+            # (compare come "in pari" in libreria). still_airing=None (fonte
+            # sconosciuta/righe precedenti a questo campo) mantiene il
+            # comportamento di prima (passa a vista).
+            series.status = Status.in_corso if series.still_airing else Status.vista
         elif series.status in (Status.da_vedere, Status.vista):
             series.status = Status.in_corso
     elif series.status == Status.vista:

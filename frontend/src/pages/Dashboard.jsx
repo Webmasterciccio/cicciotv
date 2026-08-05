@@ -1,9 +1,28 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { listSeries } from '../api.js'
 import SeriesCard from '../components/SeriesCard.jsx'
 import Suggestions from '../components/Suggestions.jsx'
 import { MEDIA_TYPES, emptyLibrary, sections, suggestionsTitle } from '../mediaMeta.js'
+
+function LibrarySection({ title, items }) {
+  return (
+    <section className="dashboard-section">
+      <h2>
+        {title} <span className="count">{items.length}</span>
+      </h2>
+      {items.length === 0 ? (
+        <p className="hint">Nessun titolo qui.</p>
+      ) : (
+        <div className="series-grid">
+          {items.map((s) => (
+            <SeriesCard key={s.id} series={s} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
 
 function Dashboard() {
   const [mediaType, setMediaType] = useState('tv')
@@ -48,22 +67,17 @@ function Dashboard() {
       ) : (
         secs.map(({ status, title }) => {
           const items = library.filter((s) => s.status === status)
-          return (
-            <section key={status} className="dashboard-section">
-              <h2>
-                {title} <span className="count">{items.length}</span>
-              </h2>
-              {items.length === 0 ? (
-                <p className="hint">Nessun titolo qui.</p>
-              ) : (
-                <div className="series-grid">
-                  {items.map((s) => (
-                    <SeriesCard key={s.id} series={s} />
-                  ))}
-                </div>
-              )}
-            </section>
-          )
+          if (mediaType === 'tv' && status === 'in_corso') {
+            const caughtUp = items.filter((s) => s.caught_up)
+            const inProgress = items.filter((s) => !s.caught_up)
+            return (
+              <Fragment key={status}>
+                {caughtUp.length > 0 && <LibrarySection title="In pari" items={caughtUp} />}
+                <LibrarySection title={title} items={inProgress} />
+              </Fragment>
+            )
+          }
+          return <LibrarySection key={status} title={title} items={items} />
         })
       )}
     </div>

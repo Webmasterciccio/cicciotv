@@ -138,8 +138,13 @@ export function deleteSeries(id) {
 
 // --- Catalogo multi-sorgente (TMDB, Jikan, Google Books, Comic Vine) ---
 
-export function searchCatalog(query, type = 'tv') {
-  return request(`/catalog/search?query=${encodeURIComponent(query)}&type=${type}`)
+export function searchCatalog(query, type = 'tv', opts = {}) {
+  const { page = 1, minRating, yearFrom, lang } = opts
+  const params = new URLSearchParams({ query, type, page })
+  if (minRating) params.set('min_rating', minRating)
+  if (yearFrom) params.set('year_from', yearFrom)
+  if (lang) params.set('lang', lang)
+  return request(`/catalog/search?${params.toString()}`)
 }
 
 // item = { source, external_id, media_type } (dai risultati di ricerca/consigli).

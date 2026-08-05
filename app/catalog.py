@@ -15,6 +15,9 @@ per un titolo "tv" (fallback, o righe preesistenti dell'ex sezione anime) si
 traduce il tipo prima di chiamare il client e lo si riporta a "tv" nel
 risultato, cosi' il resto dell'app vede sempre e solo "tv".
 """
+import difflib
+import re
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -88,23 +91,85 @@ def _tmdb_card(item: dict, media_type: str) -> dict[str, Any]:
 
 # --- Ricerca ---
 
-def search(query: str, media_type: str) -> list[dict[str, Any]]:
+def _norm_text(text: Optional[str]) -> str:
+    """Normalizza un titolo per confronti di rilevanza/deduplica (minuscolo, senza punteggiatura)."""
+    return re.sub(r"[^\w\s]", "", (text or "").lower()).strip()
+
+
+def _relevance(title: Optional[str], query: str) -> float:
+    """Punteggio di rilevanza testuale di un titolo rispetto alla query cercata."""
+    t, q = _norm_text(title), _norm_text(query)
+    if not t or not q:
+        return 0.0
+    if t == q:
+        return 4.0
+    if t.startswith(q):
+        return 3.0
+    if q in t:
+        return 2.0
+    return difflib.SequenceMatcher(None, t, q).ratio()  # max 1.0
+
+
+def _rank(results: list[dict[str, Any]], query: str) -> list[dict[str, Any]]:
+    """Riordina i risultati di ricerca per rilevanza rispetto alla query (ordine
+    stabile: a parita' di punteggio resta l'ordine nativo della sorgente)."""
+    results.sort(key=lambda it: -_relevance(it.get("title"), query))
+    return results
+
+
+def _search_tv(query: str, page: int) -> list[dict[str, Any]]:
+    """Cerca serie/anime su TMDB e AniList in parallelo e unisce i risultati,
+    deduplicando gli anime gia' presenti su TMDB (per titolo normalizzato). Se
+    una sola sorgente fallisce si usano comunque i risultati dell'altra;
+    l'errore si propaga solo se falliscono entrambe."""
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        tmdb_future = pool.submit(tmdb_client.search, query, "tv", page)
+        anilist_future = pool.submit(anilist_client.search, query, "anime", page)
+
+        tmdb_results: list[dict[str, Any]] = []
+        tmdb_error: Optional[HTTPException] = None
+        try:
+            tmdb_results = tmdb_future.result()
+        except HTTPException as exc:
+            tmdb_error = exc
+
+        anilist_results: list[dict[str, Any]] = []
+        anilist_error: Optional[HTTPException] = None
+        try:
+            anilist_results = anilist_future.result()
+        except HTTPException as exc:
+            anilist_error = exc
+
+    if tmdb_error is not None and anilist_error is not None:
+        raise tmdb_error
+
+    cards = [_tmdb_card(it, "tv") for it in tmdb_results]
+    seen_titles = {_norm_text(c["title"]) for c in cards if c.get("title")}
+    for it in anilist_results:
+        card = _card(it, "tv")
+        norm = _norm_text(card.get("title"))
+        if norm and norm in seen_titles:
+            continue
+        if norm:
+            seen_titles.add(norm)
+        cards.append(card)
+    return cards
+
+
+def search(query: str, media_type: str, page: int = 1) -> list[dict[str, Any]]:
     if media_type == "movie":
-        return [_tmdb_card(it, media_type) for it in tmdb_client.search(query, media_type)]
-    if media_type == "tv":
-        results = [_tmdb_card(it, "tv") for it in tmdb_client.search(query, "tv")]
-        if not results:
-            # Titolo non trovato su TMDB (tipico di anime recenti/di nicchia):
-            # ripiega su AniList, restituendo comunque media_type "tv".
-            results = [_card(it, "tv") for it in anilist_client.search(query, "anime")]
-        return results
-    if media_type == "manga":
-        return [_card(it, "manga") for it in anilist_client.search(query, "manga")]
-    if media_type == "book":
-        return [_card(it, "book") for it in googlebooks_client.search(query, media_type)]
-    if media_type == "comic":
-        return [_card(it, "comic") for it in comicvine_client.search(query, media_type)]
-    raise HTTPException(status_code=400, detail=f"Tipo non valido: {media_type}")
+        results = [_tmdb_card(it, media_type) for it in tmdb_client.search(query, media_type, page)]
+    elif media_type == "tv":
+        results = _search_tv(query, page)
+    elif media_type == "manga":
+        results = [_card(it, "manga") for it in anilist_client.search(query, "manga", page)]
+    elif media_type == "book":
+        results = [_card(it, "book") for it in googlebooks_client.search(query, media_type, page)]
+    elif media_type == "comic":
+        results = [_card(it, "comic") for it in comicvine_client.search(query, media_type, page)]
+    else:
+        raise HTTPException(status_code=400, detail=f"Tipo non valido: {media_type}")
+    return _rank(results, query)
 
 
 # --- Dettagli estesi (per la pagina di dettaglio) ---

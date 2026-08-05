@@ -1,10 +1,9 @@
 """Client HTTP minimale per le API di TMDB (The Movie Database)."""
 from typing import Any
 
-import httpx
 from fastapi import HTTPException
 
-from . import config
+from . import config, http_util
 
 BASE_URL = "https://api.themoviedb.org/3"
 POSTER_BASE_URL = "https://image.tmdb.org/t/p/w342"
@@ -36,24 +35,12 @@ def _require_api_key() -> str:
 
 def _get(path: str, params: dict[str, Any]) -> dict[str, Any]:
     api_key = _require_api_key()
-    try:
-        response = httpx.get(
-            f"{BASE_URL}{path}",
-            params={**params, "api_key": api_key, "language": config.TMDB_LANGUAGE},
-            timeout=10.0,
-        )
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=502, detail=f"Impossibile contattare TMDB: {exc}") from exc
-
-    if response.status_code == 401:
-        raise HTTPException(status_code=502, detail="TMDB_API_KEY non valida.")
-    if response.status_code == 404:
-        raise HTTPException(status_code=404, detail="Risorsa non trovata su TMDB.")
-    if response.status_code >= 400:
-        raise HTTPException(
-            status_code=502, detail=f"Errore TMDB ({response.status_code}): {response.text}"
-        )
-    return response.json()
+    data = http_util.get_json(
+        f"{BASE_URL}{path}",
+        params={**params, "api_key": api_key, "language": config.TMDB_LANGUAGE},
+        service="TMDB",
+    )
+    return data or {}
 
 
 def _poster_url(poster_path: str | None) -> str | None:
@@ -65,40 +52,22 @@ def _media_path(media_type: str) -> str:
     return "movie" if media_type == "movie" else "tv"
 
 
-def search_tv(query: str) -> list[dict[str, Any]]:
-    """Cerca serie TV per titolo. Restituisce risultati semplificati."""
-    data = _get("/search/tv", {"query": query})
-    return [
-        {
-            "tmdb_id": item["id"],
-            "media_type": "tv",
-            "title": item.get("name"),
-            "overview": item.get("overview"),
-            "first_air_date": item.get("first_air_date") or None,
-            "poster_url": _poster_url(item.get("poster_path")),
-        }
-        for item in data.get("results", [])
-    ]
+def search_tv(query: str, page: int = 1) -> list[dict[str, Any]]:
+    """Cerca serie TV per titolo. Stesso formato di discover/popolari (con
+    vote_average/original_language), cosi' i filtri di ricerca funzionano."""
+    data = _get("/search/tv", {"query": query, "page": page})
+    return [_norm_item(item, "tv") for item in data.get("results", [])]
 
 
-def search_movie(query: str) -> list[dict[str, Any]]:
-    """Cerca film per titolo. Restituisce risultati semplificati."""
-    data = _get("/search/movie", {"query": query})
-    return [
-        {
-            "tmdb_id": item["id"],
-            "media_type": "movie",
-            "title": item.get("title"),
-            "overview": item.get("overview"),
-            "first_air_date": item.get("release_date") or None,
-            "poster_url": _poster_url(item.get("poster_path")),
-        }
-        for item in data.get("results", [])
-    ]
+def search_movie(query: str, page: int = 1) -> list[dict[str, Any]]:
+    """Cerca film per titolo. Stesso formato di discover/popolari (con
+    vote_average/original_language), cosi' i filtri di ricerca funzionano."""
+    data = _get("/search/movie", {"query": query, "page": page})
+    return [_norm_item(item, "movie") for item in data.get("results", [])]
 
 
-def search(query: str, media_type: str = "tv") -> list[dict[str, Any]]:
-    return search_movie(query) if media_type == "movie" else search_tv(query)
+def search(query: str, media_type: str = "tv", page: int = 1) -> list[dict[str, Any]]:
+    return search_movie(query, page) if media_type == "movie" else search_tv(query, page)
 
 
 def get_tv_details(tmdb_id: int) -> dict[str, Any]:

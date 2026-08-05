@@ -3,7 +3,18 @@ import { importItem, searchCatalog } from '../api.js'
 import MediaPreview from '../components/MediaPreview.jsx'
 import Poster from '../components/Poster.jsx'
 import Suggestions from '../components/Suggestions.jsx'
-import { MEDIA_TYPES, searchPlaceholder, suggestionsTitle } from '../mediaMeta.js'
+import {
+  langFilterAvailable,
+  MEDIA_TYPES,
+  PERIOD_OPTIONS,
+  RATING_OPTIONS,
+  searchPlaceholder,
+  suggestionsTitle,
+} from '../mediaMeta.js'
+
+// Fonti "extra" (oltre a quella primaria del tipo) da segnalare sulla card,
+// cosi' si vede quali risultati "tv" vengono dalla fusione con AniList.
+const SOURCE_LABEL = { anilist: 'AniList' }
 
 function addLabel(state) {
   if (state === 'adding') return 'Aggiungo…'
@@ -17,25 +28,71 @@ function Search() {
   const [mediaType, setMediaType] = useState('tv')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(false)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
   const [addState, setAddState] = useState({}) // external_id -> stato
   const [preview, setPreview] = useState(null) // item mostrato in anteprima
+  const [minRating, setMinRating] = useState('')
+  const [period, setPeriod] = useState('')
+  const [onlyIt, setOnlyIt] = useState(false)
 
-  async function handleSubmit(event) {
-    event.preventDefault()
-    if (!query.trim()) return
-    setLoading(true)
-    setError(null)
+  const showLangFilter = langFilterAvailable(mediaType)
+
+  // overrides permette di applicare un filtro appena cambiato prima che lo
+  // stato React si aggiorni (onChange passa il nuovo valore direttamente).
+  function buildOpts(pageNum, overrides = {}) {
+    const rating = 'minRating' in overrides ? overrides.minRating : minRating
+    const per = 'period' in overrides ? overrides.period : period
+    const it = 'onlyIt' in overrides ? overrides.onlyIt : onlyIt
+    const opts = { page: pageNum }
+    if (rating) opts.minRating = rating
+    if (per) {
+      const now = new Date().getFullYear()
+      opts.yearFrom = per === '2000' ? 2000 : now - Number(per)
+    }
+    if (it && showLangFilter) opts.lang = 'it'
+    return opts
+  }
+
+  async function runSearch(pageNum, overrides = {}) {
+    const q = query.trim()
+    if (!q) return
+    if (pageNum === 1) {
+      setLoading(true)
+      setError(null)
+    } else {
+      setLoadingMore(true)
+    }
     try {
-      const data = await searchCatalog(query.trim(), mediaType)
-      setResults(data)
-      setAddState({})
+      const data = await searchCatalog(q, mediaType, buildOpts(pageNum, overrides))
+      setResults((prev) => (pageNum === 1 ? data : [...(prev || []), ...data]))
+      setPage(pageNum)
+      if (pageNum === 1) setAddState({})
     } catch (err) {
       setError(err.message)
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
+  }
+
+  function handleSubmit(event) {
+    event.preventDefault()
+    runSearch(1)
+  }
+
+  // Cambiare un filtro con una ricerca gia' attiva la rilancia subito.
+  function handleFilterChange(overrides) {
+    if ('minRating' in overrides) setMinRating(overrides.minRating)
+    if ('period' in overrides) setPeriod(overrides.period)
+    if ('onlyIt' in overrides) setOnlyIt(overrides.onlyIt)
+    if (results !== null) runSearch(1, overrides)
+  }
+
+  function loadMore() {
+    runSearch(page + 1)
   }
 
   function changeType(type) {
@@ -91,6 +148,41 @@ function Search() {
         </button>
       </form>
 
+      <div className="suggestions-controls">
+        <select
+          value={minRating}
+          onChange={(e) => handleFilterChange({ minRating: e.target.value })}
+          aria-label="Voto minimo"
+        >
+          {RATING_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={period}
+          onChange={(e) => handleFilterChange({ period: e.target.value })}
+          aria-label="Periodo"
+        >
+          {PERIOD_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+        {showLangFilter && (
+          <label className="suggestions-lang">
+            <input
+              type="checkbox"
+              checked={onlyIt}
+              onChange={(e) => handleFilterChange({ onlyIt: e.target.checked })}
+            />
+            Solo IT
+          </label>
+        )}
+      </div>
+
       {error && <p className="error">Errore nella ricerca: {error}</p>}
 
       {/* Risultati di ricerca */}
@@ -106,9 +198,11 @@ function Search() {
           <div className="search-results">
             {results.map((item) => {
               const state = addState[item.external_id]
+              const sourceTag = mediaType === 'tv' ? SOURCE_LABEL[item.source] : null
               const sub = [
                 item.first_air_date?.slice(0, 4),
                 (item.authors || [])[0],
+                sourceTag,
               ]
                 .filter(Boolean)
                 .join(' · ')
@@ -141,6 +235,16 @@ function Search() {
               )
             })}
           </div>
+          {results.length > 0 && (
+            <button
+              type="button"
+              className="suggestions-more"
+              onClick={loadMore}
+              disabled={loadingMore}
+            >
+              {loadingMore ? 'Carico…' : 'Mostra altri'}
+            </button>
+          )}
         </>
       )}
 

@@ -21,6 +21,24 @@ const SOURCE = {
 }
 export const sourceFor = (type) => SOURCE[type] || 'tmdb'
 
+// Opzioni dei filtri di voto/periodo, condivise da Ricerca e Consigliati.
+export const RATING_OPTIONS = [
+  { value: '', label: 'Voto: tutti' },
+  { value: '6', label: '★ 6+' },
+  { value: '7', label: '★ 7+' },
+  { value: '8', label: '★ 8+' },
+]
+export const PERIOD_OPTIONS = [
+  { value: '', label: 'Periodo: tutto' },
+  { value: '5', label: 'Ultimi 5 anni' },
+  { value: '10', label: 'Ultimi 10 anni' },
+  { value: '2000', label: 'Dal 2000' },
+]
+
+// La lingua originale ha senso solo per serie/film (TMDB): per gli altri tipi
+// i titoli sono in giapponese/inglese, quindi il filtro "Solo IT" non serve.
+export const langFilterAvailable = (type) => type === 'tv' || type === 'movie'
+
 // Tipi che si "leggono" (manga, libri, fumetti) vs quelli che si "guardano".
 const READ = new Set(['manga', 'book', 'comic'])
 export const isRead = (type) => READ.has(type)

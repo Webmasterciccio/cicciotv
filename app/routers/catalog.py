@@ -45,9 +45,18 @@ def _passes_filters(item: dict, min_rating, year_from, lang) -> bool:
 
 
 @router.get("/search", response_model=list[schemas.SearchResult])
-def search(query: str = Query(..., min_length=1), type: str = MediaType):
-    """Cerca titoli sulla sorgente giusta per il tipo."""
-    return catalog.search(query, type)
+def search(
+    query: str = Query(..., min_length=1),
+    type: str = MediaType,
+    page: int = Query(default=1, ge=1, le=5),
+    min_rating: float | None = Query(default=None, ge=0, le=10),
+    year_from: int | None = Query(default=None, ge=1000, le=2100),
+    lang: str | None = Query(default=None, min_length=2, max_length=2),
+):
+    """Cerca titoli sulla sorgente giusta per il tipo (per "tv" unisce TMDB e
+    AniList), con paginazione e filtri opzionali su voto/anno/lingua."""
+    results = catalog.search(query, type, page)
+    return [it for it in results if _passes_filters(it, min_rating, year_from, lang)]
 
 
 @router.get("/genres", response_model=list[schemas.Genre])

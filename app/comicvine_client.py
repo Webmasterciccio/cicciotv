@@ -66,11 +66,12 @@ def _normalize(item: dict) -> dict[str, Any]:
         "vote_average": None,
         "authors": [publisher] if publisher else [],
         "genres": [],
+        "original_language": "en",
         "progress_total": item.get("count_of_issues") or None,
     }
 
 
-def search(query: str, media_type: str = "comic") -> list[dict[str, Any]]:
+def search(query: str, media_type: str = "comic", page: int = 1) -> list[dict[str, Any]]:
     """Cerca serie a fumetti (volumi) per titolo."""
     data = _get(
         "/search/",
@@ -78,6 +79,7 @@ def search(query: str, media_type: str = "comic") -> list[dict[str, Any]]:
             "query": query,
             "resources": "volume",
             "limit": 20,
+            "offset": (page - 1) * 20,
             "field_list": "id,name,image,deck,start_year,publisher,count_of_issues",
         },
     )

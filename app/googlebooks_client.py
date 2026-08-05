@@ -53,13 +53,17 @@ def _normalize(volume: dict) -> dict[str, Any]:
         "vote_average": _rating(info),
         "authors": info.get("authors") or [],
         "genres": info.get("categories") or [],
+        "original_language": info.get("language") or None,
         "progress_total": info.get("pageCount") or None,
     }
 
 
-def search(query: str, media_type: str = "book") -> list[dict[str, Any]]:
+def search(query: str, media_type: str = "book", page: int = 1) -> list[dict[str, Any]]:
     """Cerca libri per titolo/autore."""
-    data = _get("/volumes", {"q": query, "maxResults": 20, "printType": "books"})
+    data = _get(
+        "/volumes",
+        {"q": query, "maxResults": 20, "startIndex": (page - 1) * 20, "printType": "books"},
+    )
     return [_normalize(v) for v in (data or {}).get("items", [])]
 
 

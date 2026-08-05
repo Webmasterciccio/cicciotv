@@ -78,8 +78,8 @@ def _normalize(m: dict, media_type: str) -> dict[str, Any]:
 
 
 _SEARCH_QUERY = """
-query ($q: String, $type: MediaType) {
-  Page(perPage: 20) {
+query ($q: String, $type: MediaType, $page: Int) {
+  Page(page: $page, perPage: 20) {
     media(search: $q, type: $type, sort: SEARCH_MATCH) {
       id title { romaji english native } coverImage { large } description(asHtml: false)
       startDate { year month day } averageScore genres episodes chapters
@@ -89,9 +89,9 @@ query ($q: String, $type: MediaType) {
 """
 
 
-def search(query: str, media_type: str = "anime") -> list[dict[str, Any]]:
+def search(query: str, media_type: str = "anime", page: int = 1) -> list[dict[str, Any]]:
     """Cerca anime o manga per titolo."""
-    data = _query(_SEARCH_QUERY, {"q": query, "type": _type_of(media_type)})
+    data = _query(_SEARCH_QUERY, {"q": query, "type": _type_of(media_type), "page": page})
     items = ((data.get("Page") or {}).get("media")) or []
     return [_normalize(m, media_type) for m in items]
 

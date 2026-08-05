@@ -160,10 +160,6 @@ export function importItem(item, status = 'da_vedere') {
   })
 }
 
-export function getGenres(type = 'tv') {
-  return request(`/catalog/genres?type=${type}`)
-}
-
 // Dettagli di un titolo non ancora in libreria (anteprima prima di aggiungerlo).
 export function getCatalogDetails(item) {
   const p = new URLSearchParams({

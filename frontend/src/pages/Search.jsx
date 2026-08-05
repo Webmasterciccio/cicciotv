@@ -200,6 +200,7 @@ function Search() {
               const state = addState[item.external_id]
               const sourceTag = mediaType === 'tv' ? SOURCE_LABEL[item.source] : null
               const sub = [
+                item.vote_average ? `★ ${item.vote_average.toFixed(1)}` : null,
                 item.first_air_date?.slice(0, 4),
                 (item.authors || [])[0],
                 sourceTag,
@@ -221,8 +222,10 @@ function Search() {
                     <button type="button" className="result-title" onClick={() => setPreview(item)}>
                       {item.title}
                     </button>
-                    <p className="hint">{sub || 'Data sconosciuta'}</p>
-                    {item.overview && <p className="overview">{item.overview}</p>}
+                    <p className="hint">{sub || 'Dati non disponibili'}</p>
+                    <p className={`overview${item.overview ? '' : ' overview-empty'}`}>
+                      {item.overview || 'Nessuna descrizione disponibile.'}
+                    </p>
                     <button
                       type="button"
                       onClick={() => handleAdd(item)}

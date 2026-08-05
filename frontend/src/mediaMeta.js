@@ -4,11 +4,11 @@
 // L'anime non e' una sezione a se': confluisce in "Serie TV" (con fallback su
 // AniList in ricerca quando TMDB non ha il titolo).
 export const MEDIA_TYPES = [
-  { type: 'tv', label: 'Serie TV', hasGenres: true },
-  { type: 'movie', label: 'Film', hasGenres: true },
-  { type: 'manga', label: 'Manga', hasGenres: true },
-  { type: 'book', label: 'Libri', hasGenres: false },
-  { type: 'comic', label: 'Fumetti', hasGenres: false },
+  { type: 'tv', label: 'Serie TV' },
+  { type: 'movie', label: 'Film' },
+  { type: 'manga', label: 'Manga' },
+  { type: 'book', label: 'Libri' },
+  { type: 'comic', label: 'Fumetti' },
 ]
 
 // Sorgente esterna associata a ogni tipo (serve per import/dismiss).

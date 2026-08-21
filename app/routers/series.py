@@ -210,11 +210,17 @@ def recommendations(
     db: Session = Depends(get_db),
     user: models.User = Depends(auth.get_current_user),
 ):
-    """Titoli consigliati/simili a partire da questo (dalla stessa sorgente)."""
+    """Titoli consigliati/simili a partire da questo (dalla stessa sorgente),
+    esclusi quelli gia' presenti in libreria."""
     series = _get_series_or_404(db, series_id, user.id)
     if not series.external_id:
         return []
-    return catalog.get_recommendations(series.media_type, series.source, series.external_id)
+    blocked = crud.get_library_external_ids(db, user.id, series.media_type)
+    return [
+        r
+        for r in catalog.get_recommendations(series.media_type, series.source, series.external_id)
+        if r.get("external_id") not in blocked
+    ]
 
 
 @router.get("/{series_id}/episodes", response_model=list[schemas.EpisodeRead])

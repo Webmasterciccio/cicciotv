@@ -298,7 +298,7 @@ def build_import(media_type: str, source: str, external_id: str) -> tuple[schema
 
     genres = ",".join(details.get("genres") or []) or None
     if media_type == "manga":
-        progress_total = details.get("chapters")
+        progress_total = details.get("volumes")
     elif media_type == "book":
         progress_total = details.get("page_count")
     elif media_type == "comic":

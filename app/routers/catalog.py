@@ -86,6 +86,17 @@ def preview_watch_providers(
     return catalog.get_watch_providers(type, source, external_id)
 
 
+@router.get("/library-ids", response_model=list[str])
+def library_ids(
+    type: str = MediaType,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
+    """External_id gia' in libreria per quel tipo: permette al frontend di
+    mostrare 'gia' aggiunto' prima ancora di provare l'import."""
+    return sorted(crud.get_library_external_ids(db, user.id, type))
+
+
 @router.get("/suggestions", response_model=list[schemas.Recommendation])
 def suggestions(
     limit: int = Query(default=20, ge=1, le=40),

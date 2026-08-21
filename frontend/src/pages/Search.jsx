@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { importItem, searchCatalog } from '../api.js'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { getLibraryIds, importItem, searchCatalog } from '../api.js'
 import MediaPreview from '../components/MediaPreview.jsx'
 import Poster from '../components/Poster.jsx'
 import Suggestions from '../components/Suggestions.jsx'
@@ -19,12 +20,13 @@ const SOURCE_LABEL = { anilist: 'AniList' }
 function addLabel(state) {
   if (state === 'adding') return 'Aggiungo…'
   if (state === 'added') return 'Aggiunto ✓'
-  if (state === 'exists') return 'Già in libreria'
+  if (state === 'exists') return '✓ Già in libreria'
   if (state === 'error') return 'Riprova'
   return 'Aggiungi'
 }
 
 function Search() {
+  const navigate = useNavigate()
   const [mediaType, setMediaType] = useState('tv')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState(null)
@@ -33,12 +35,25 @@ function Search() {
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState(null)
   const [addState, setAddState] = useState({}) // external_id -> stato
+  const [libraryIds, setLibraryIds] = useState(new Set()) // external_id gia' in libreria per questo tipo
   const [preview, setPreview] = useState(null) // item mostrato in anteprima
   const [minRating, setMinRating] = useState('')
   const [period, setPeriod] = useState('')
   const [onlyIt, setOnlyIt] = useState(false)
 
   const showLangFilter = langFilterAvailable(mediaType)
+
+  // Carichiamo gli id gia' in libreria per questo tipo, cosi' i risultati di
+  // ricerca possono mostrare subito "gia' in libreria" senza dover cliccare.
+  useEffect(() => {
+    let alive = true
+    getLibraryIds(mediaType)
+      .then((ids) => alive && setLibraryIds(new Set(ids)))
+      .catch(() => alive && setLibraryIds(new Set()))
+    return () => {
+      alive = false
+    }
+  }, [mediaType])
 
   // overrides permette di applicare un filtro appena cambiato prima che lo
   // stato React si aggiorni (onChange passa il nuovo valore direttamente).
@@ -69,7 +84,13 @@ function Search() {
       const data = await searchCatalog(q, mediaType, buildOpts(pageNum, overrides))
       setResults((prev) => (pageNum === 1 ? data : [...(prev || []), ...data]))
       setPage(pageNum)
-      if (pageNum === 1) setAddState({})
+      if (pageNum === 1) {
+        const initial = {}
+        data.forEach((item) => {
+          if (libraryIds.has(String(item.external_id))) initial[item.external_id] = 'exists'
+        })
+        setAddState(initial)
+      }
     } catch (err) {
       setError(err.message)
     } finally {
@@ -112,6 +133,7 @@ function Search() {
     try {
       await importItem(item, 'da_vedere')
       setAddState((prev) => ({ ...prev, [item.external_id]: 'added' }))
+      navigate('/')
     } catch (err) {
       setAddState((prev) => ({
         ...prev,
@@ -259,6 +281,7 @@ function Search() {
       {preview && (
         <MediaPreview
           item={preview}
+          initialState={addState[preview.external_id] ?? null}
           onClose={() => setPreview(null)}
           onAdded={(it) => setAddState((prev) => ({ ...prev, [it.external_id]: 'added' }))}
         />

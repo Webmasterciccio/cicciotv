@@ -57,7 +57,7 @@ export function unitLabel(type, plural = true) {
   const map = {
     tv: ['episodio', 'episodi'],
     comic: ['numero', 'numeri'],
-    manga: ['capitolo', 'capitoli'],
+    manga: ['volume', 'volumi'],
     book: ['pagina', 'pagine'],
   }
   const pair = map[type]

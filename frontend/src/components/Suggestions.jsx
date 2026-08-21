@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { dismissSuggestion, getSuggestions, importItem } from '../api.js'
 import MediaPreview from './MediaPreview.jsx'
 import Poster from './Poster.jsx'
@@ -16,7 +16,7 @@ const PERIODS = PERIOD_OPTIONS
 function addLabel(state) {
   if (state === 'adding') return 'Aggiungo…'
   if (state === 'added') return 'Aggiunto ✓'
-  if (state === 'exists') return 'Già in libreria'
+  if (state === 'exists') return '✓ Già in libreria'
   if (state === 'error') return 'Riprova'
   return 'Aggiungi'
 }
@@ -24,6 +24,7 @@ function addLabel(state) {
 // Griglia di titoli consigliati (motore ibrido: «perché hai visto/letto X» +
 // generi/popolari), con filtri, «Mostra altri» e «non mi interessa».
 function Suggestions({ title = 'Consigliati per te', mediaType = 'tv' }) {
+  const navigate = useNavigate()
   const [items, setItems] = useState(null)
   const [addState, setAddState] = useState({})
   const [preview, setPreview] = useState(null)
@@ -90,6 +91,7 @@ function Suggestions({ title = 'Consigliati per te', mediaType = 'tv' }) {
     try {
       await importItem(item, 'da_vedere')
       setAddState((prev) => ({ ...prev, [item.external_id]: 'added' }))
+      navigate('/')
     } catch (err) {
       setAddState((prev) => ({
         ...prev,

@@ -180,6 +180,11 @@ export function getCatalogWatchProviders(item) {
   return request(`/catalog/watch-providers?${p.toString()}`)
 }
 
+export function getLibraryIds(type = 'tv') {
+  const params = new URLSearchParams({ type })
+  return request(`/catalog/library-ids?${params.toString()}`)
+}
+
 export function getSuggestions(type = 'tv', opts = {}) {
   const { limit = 20, sort, minRating, yearFrom, lang, exclude } = opts
   const params = new URLSearchParams({ type, limit })

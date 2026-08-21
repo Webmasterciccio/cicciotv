@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { getCatalogDetails, getCatalogWatchProviders, importItem } from '../api.js'
 import Poster from './Poster.jsx'
 import { labelOf, unitLabel } from '../mediaMeta.js'
@@ -15,18 +16,19 @@ const PROVIDER_KIND_LABELS = {
 function addLabel(state) {
   if (state === 'adding') return 'Aggiungo…'
   if (state === 'added') return 'Aggiunto ✓'
-  if (state === 'exists') return 'Già in libreria'
+  if (state === 'exists') return '✓ Già in libreria'
   if (state === 'error') return 'Riprova'
   return 'Aggiungi alla libreria'
 }
 
 // Anteprima di un titolo (di qualsiasi sorgente) prima di aggiungerlo: modale
 // con trama, generi, dati specifici del tipo e il pulsante per aggiungere.
-function MediaPreview({ item, onClose, onAdded }) {
+function MediaPreview({ item, onClose, onAdded, initialState = null }) {
+  const navigate = useNavigate()
   const [details, setDetails] = useState(null)
   const [providers, setProviders] = useState(null)
   const [error, setError] = useState(null)
-  const [addState, setAddState] = useState(null)
+  const [addState, setAddState] = useState(initialState)
 
   const type = item.media_type
   const isWatchable = type === 'tv' || type === 'movie'
@@ -67,6 +69,7 @@ function MediaPreview({ item, onClose, onAdded }) {
       await importItem(item, 'da_vedere')
       setAddState('added')
       if (onAdded) onAdded(item)
+      navigate('/')
     } catch (e) {
       setAddState(e.status === 409 ? 'exists' : 'error')
     }

@@ -224,7 +224,7 @@ function SeriesDetail() {
   const statusOptions = isMovie ? { da_vedere: labels.da_vedere, vista: labels.vista } : labels
   const showUnits = hasUnitList(type) // tv/comic → lista episodi/numeri
   const showProgress = hasProgress(type) // manga/libri → progresso numerico
-  const unitsTitle = type === 'comic' ? 'Numeri' : 'Episodi'
+  const unitsTitle = type === 'comic' ? 'Numeri' : type === 'manga' ? 'Volumi' : 'Episodi'
 
   // Etichetta del titolo di credito, diversa per sorgente. Per "tv" copre sia
   // le serie TMDB (creata da) sia gli anime da AniList/Jikan (d.created_by
@@ -362,7 +362,9 @@ function SeriesDetail() {
 
             {series.current_season != null && (
               <p className="hint">
-                Progresso: S{series.current_season} · E{series.current_episode}
+                {type === 'manga'
+                  ? `Progresso: Volume ${series.current_episode}`
+                  : `Progresso: S${series.current_season} · E${series.current_episode}`}
               </p>
             )}
 
@@ -521,6 +523,7 @@ function SeriesDetail() {
                   const sub = [formatDate(ep.air_date), ep.runtime ? `${ep.runtime} min` : null]
                     .filter(Boolean)
                     .join(' · ')
+                  const unitPrefix = type === 'comic' ? 'N' : type === 'manga' ? 'Vol. ' : 'E'
                   return (
                     <li key={ep.id} className="episode-item">
                       <label className="episode-label">
@@ -534,13 +537,13 @@ function SeriesDetail() {
                           <img className="episode-still" src={ep.still_url} alt="" loading="lazy" />
                         ) : (
                           <div className="episode-still episode-still-empty" aria-hidden="true">
-                            E{ep.episode_number}
+                            {unitPrefix}{ep.episode_number}
                           </div>
                         )}
                         <div className="episode-text">
                           <div className="episode-head">
-                            <span className="episode-number">E{ep.episode_number}</span>
-                            <span className="episode-name">{ep.name}</span>
+                            <span className="episode-number">{unitPrefix}{ep.episode_number}</span>
+                            {type !== 'manga' && <span className="episode-name">{ep.name}</span>}
                             {ep.vote_average ? (
                               <span className="episode-vote">★ {ep.vote_average.toFixed(1)}</span>
                             ) : null}

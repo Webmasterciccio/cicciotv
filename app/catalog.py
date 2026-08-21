@@ -21,10 +21,18 @@ from typing import Any, Optional
 
 from fastapi import HTTPException
 
-from . import anilist_client, comicvine_client, googlebooks_client, jikan_client, schemas, tmdb_client
+from . import (
+    anilist_client,
+    comicvine_client,
+    googlebooks_client,
+    jikan_client,
+    mangadex_client,
+    schemas,
+    tmdb_client,
+)
 
-# Tipi che tracciano singole "unita'" (episodi/numeri) nella tabella Episode.
-UNIT_TYPES = {"tv", "comic"}
+# Tipi che tracciano singole "unita'" (episodi/numeri/volumi) nella tabella Episode.
+UNIT_TYPES = {"tv", "comic", "manga"}
 # Tipi di media gestiti dal catalogo (l'anime confluisce in "tv").
 MEDIA_TYPES = ("tv", "movie", "manga", "book", "comic")
 
@@ -199,16 +207,21 @@ def has_units(media_type: str) -> bool:
     return media_type in UNIT_TYPES
 
 
-def get_units(media_type: str, source: str, external_id: str) -> list[dict[str, Any]]:
-    """Episodi (serie TV non-TMDB, ex sezione anime) o numeri (fumetti). Le
-    serie TV da TMDB usano il percorso dedicato (stagioni) nel router; qui
-    gestiamo tv via AniList/Jikan e i fumetti via Comic Vine."""
+def get_units(
+    media_type: str, source: str, external_id: str, title: Optional[str] = None
+) -> list[dict[str, Any]]:
+    """Episodi (serie TV non-TMDB, ex sezione anime), numeri (fumetti) o
+    volumi (manga, copertine da MangaDex). Le serie TV da TMDB usano il
+    percorso dedicato (stagioni) nel router; qui gestiamo tv via AniList/
+    Jikan, i fumetti via Comic Vine e i manga via MangaDex."""
     if media_type == "tv" and source == "anilist":
         return anilist_client.get_episodes(external_id)
     if media_type == "tv" and source == "jikan":
         return jikan_client.get_episodes(external_id)
     if media_type == "comic":
         return comicvine_client.get_issues(external_id)
+    if media_type == "manga":
+        return mangadex_client.get_volumes(external_id, title or "")
     return []
 
 
@@ -321,7 +334,7 @@ def build_import(media_type: str, source: str, external_id: str) -> tuple[schema
     units: list[dict] = []
     if has_units(media_type):
         try:
-            units = get_units(media_type, source, external_id)
+            units = get_units(media_type, source, external_id, title=details.get("title"))
         except HTTPException:
             # Un guasto transitorio nel recupero di episodi/numeri non deve
             # bloccare l'aggiunta alla libreria: si importa comunque il

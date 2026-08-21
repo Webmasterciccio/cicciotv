@@ -104,12 +104,16 @@ def _sync_series_units(db: Session, series: models.Series) -> None:
     gia' segnate come viste. Per le serie tv aggiorna anche still_airing (la
     fonte dice se e' ancora in produzione), usato per distinguere "in pari" da
     "vista" e per il refresh automatico throttled di GET /series."""
-    # Fumetti (Comic Vine) o serie TV non-TMDB (AniList/Jikan, ex sezione
-    # anime): lista piatta di unita' dal dispatcher.
-    if series.media_type == "comic" or (series.media_type == "tv" and series.source != "tmdb"):
+    # Fumetti (Comic Vine), manga (MangaDex) o serie TV non-TMDB (AniList/
+    # Jikan, ex sezione anime): lista piatta di unita' dal dispatcher.
+    if series.media_type in ("comic", "manga") or (
+        series.media_type == "tv" and series.source != "tmdb"
+    ):
         if not series.external_id:
             raise HTTPException(status_code=400, detail="Titolo non collegato alla sorgente")
-        units = catalog.get_units(series.media_type, series.source, series.external_id)
+        units = catalog.get_units(
+            series.media_type, series.source, series.external_id, title=series.title
+        )
         crud.sync_episodes(db, series.id, units)
         if series.media_type == "tv":
             details = catalog.get_details(series.media_type, series.source, series.external_id)

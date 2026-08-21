@@ -44,12 +44,13 @@ const READ = new Set(['manga', 'book', 'comic'])
 export const isRead = (type) => READ.has(type)
 export const verb = (type) => (isRead(type) ? 'letto' : 'visto')
 
-// Tipi con lista di unita' tracciate una a una (tabella Episode): episodi/numeri.
-const UNIT_LIST = new Set(['tv', 'comic'])
+// Tipi con lista di unita' tracciate una a una (tabella Episode): episodi/
+// numeri/volumi (i manga hanno una copertina per volume da MangaDex).
+const UNIT_LIST = new Set(['tv', 'comic', 'manga'])
 export const hasUnitList = (type) => UNIT_LIST.has(type)
 
-// Tipi con progresso numerico (manga: capitoli, libri: pagine).
-const PROGRESS = new Set(['manga', 'book'])
+// Tipi con progresso numerico semplice (solo libri: pagine lette/totali).
+const PROGRESS = new Set(['book'])
 export const hasProgress = (type) => PROGRESS.has(type)
 
 // Nome dell'unita' tracciata, per etichette e conteggi.

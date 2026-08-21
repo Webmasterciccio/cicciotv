@@ -138,8 +138,18 @@ function SeriesDetail() {
   }, [series, episodes])
 
   async function handleStatusChange(newStatus) {
+    // Segnare "vista"/"letto" a mano marca anche tutti gli episodi/volumi
+    // come visti/letti, cosi' la griglia resta coerente con lo stato scelto.
+    if (newStatus === 'vista' && hasUnitList(type) && seasons.length > 0) {
+      for (const [seasonNumber] of seasons) {
+        await setSeasonWatched(id, seasonNumber, true)
+      }
+    }
     const updated = await updateSeries(id, { status: newStatus })
     setSeries(updated)
+    if (newStatus === 'vista' && hasUnitList(type) && seasons.length > 0) {
+      setEpisodes(await getEpisodes(id))
+    }
   }
 
   async function handleRatingChange(newRating) {

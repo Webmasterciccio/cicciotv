@@ -534,7 +534,13 @@ function SeriesDetail() {
                           onChange={(e) => handleEpisodeToggle(ep, e.target.checked)}
                         />
                         {ep.still_url ? (
-                          <img className="episode-still" src={ep.still_url} alt="" loading="lazy" />
+                          <img
+                            className="episode-still"
+                            src={ep.still_url}
+                            alt=""
+                            loading="lazy"
+                            referrerPolicy="no-referrer"
+                          />
                         ) : (
                           <div className="episode-still episode-still-empty" aria-hidden="true">
                             {unitPrefix}{ep.episode_number}

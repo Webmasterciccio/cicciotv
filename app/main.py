@@ -6,7 +6,7 @@ from sqlalchemy import inspect, text
 from . import auth
 from .database import Base, engine
 from .routers import auth as auth_router
-from .routers import catalog, series, settings, stats, users
+from .routers import backup, catalog, series, settings, stats, users
 
 def _drop_old_dismissals() -> None:
     """La tabella 'dismissals' (recentissima) e' passata dalla chiave tmdb_id
@@ -207,6 +207,7 @@ app.include_router(series.router, dependencies=protected)
 app.include_router(catalog.router, dependencies=protected)
 app.include_router(settings.router, dependencies=protected)
 app.include_router(stats.router, dependencies=protected)
+app.include_router(backup.router, dependencies=protected)
 
 
 @app.get("/", tags=["health"])

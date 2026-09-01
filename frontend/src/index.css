@@ -1537,10 +1537,36 @@ select {
 
 /* Sezione utenti nelle Impostazioni */
 
+.pin-section,
+.backup-section,
 .users-section {
   margin-top: 2.5rem;
   border-top: 1px solid var(--border);
   padding-top: 1.5rem;
+}
+
+.backup-actions {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+/* Un <label> che si comporta visivamente come un bottone, per l'input file
+   nascosto dell'importazione (gli input file non si possono stilizzare). */
+.button-like {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  display: inline-flex;
+  align-items: center;
+}
+
+.button-like:hover {
+  border-color: var(--accent);
 }
 
 .users-list {

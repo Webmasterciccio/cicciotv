@@ -10,6 +10,8 @@ from .models import Status
 class SeriesBase(BaseModel):
     """Campi comuni, tutti opzionali tranne dove indicato."""
 
+    model_config = ConfigDict(from_attributes=True)
+
     title: str = Field(..., min_length=1, description="Titolo della serie")
     media_type: str = Field(default="tv", description="tv, movie, manga, book, comic")
     source: str = Field(
@@ -253,6 +255,61 @@ class SettingsUpdate(BaseModel):
     preferred_genres_tv: Optional[list[int]] = None
     preferred_genres_movie: Optional[list[int]] = None
     preferred_genres_manga: Optional[list[int]] = None
+
+
+class PinChange(BaseModel):
+    """Cambio del proprio PIN: richiede quello attuale (a differenza del reset
+    fatto dall'admin su un altro utente)."""
+
+    current_pin: str = Field(..., min_length=1)
+    new_pin: str = Field(..., min_length=4)
+
+
+class EpisodeExport(BaseModel):
+    """Un episodio/volume/numero nell'export della libreria."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    season_number: int
+    episode_number: int
+    name: Optional[str] = None
+    overview: Optional[str] = None
+    still_url: Optional[str] = None
+    air_date: Optional[str] = None
+    vote_average: Optional[float] = None
+    runtime: Optional[int] = None
+    watched: bool = False
+    watched_at: Optional[datetime] = None
+    watched_bulk: bool = False
+
+
+class SeriesExport(SeriesBase):
+    """Una serie/film/manga/libro/fumetto nell'export della libreria, con i
+    suoi episodi/volumi e le date di inizio/fine (usate dalle statistiche)."""
+
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    episodes: list[EpisodeExport] = Field(default_factory=list)
+
+
+class LibraryExport(BaseModel):
+    """Backup completo della libreria di un utente: titoli, episodi/volumi
+    visti e preferenze, in un unico file da poter reimportare altrove."""
+
+    version: int = 1
+    exported_at: datetime
+    series: list[SeriesExport] = Field(default_factory=list)
+    preferred_genres_tv: list[int] = Field(default_factory=list)
+    preferred_genres_movie: list[int] = Field(default_factory=list)
+    preferred_genres_manga: list[int] = Field(default_factory=list)
+
+
+class ImportResult(BaseModel):
+    """Esito di un'importazione: quanti titoli sono stati aggiunti e quanti
+    saltati perche' gia' presenti in libreria."""
+
+    imported: int
+    skipped: int
 
 
 class LoginRequest(BaseModel):

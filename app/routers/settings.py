@@ -1,5 +1,5 @@
 """Endpoint per le preferenze dell'utente (generi preferiti per tipo, per utente)."""
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from .. import auth, crud, models, schemas
@@ -39,3 +39,18 @@ def update_settings(
     if payload.preferred_genres_manga is not None:
         crud.set_preferred_genres(db, user.id, "manga", payload.preferred_genres_manga)
     return _current(db, user.id)
+
+
+@router.post("/change-pin", status_code=204)
+def change_own_pin(
+    payload: schemas.PinChange,
+    db: Session = Depends(get_db),
+    user: models.User = Depends(auth.get_current_user),
+):
+    """Permette a un utente di cambiare il proprio PIN (serve quello attuale,
+    a differenza del reset che l'admin puo' fare su un altro utente)."""
+    if not auth.verify_pin(payload.current_pin.strip(), user.pin_hash, user.pin_salt):
+        raise HTTPException(status_code=400, detail="PIN attuale errato")
+    user.pin_hash, user.pin_salt = auth.hash_pin(payload.new_pin.strip())
+    db.commit()
+    return None

@@ -221,6 +221,23 @@ export function getStats() {
   return request('/stats')
 }
 
+export function changeMyPin(currentPin, newPin) {
+  return request('/settings/change-pin', {
+    method: 'POST',
+    body: JSON.stringify({ current_pin: currentPin, new_pin: newPin }),
+  })
+}
+
+// --- Backup (export/import della propria libreria) ---
+
+export function exportLibrary() {
+  return request('/backup/export')
+}
+
+export function importLibrary(data) {
+  return request('/backup/import', { method: 'POST', body: JSON.stringify(data) })
+}
+
 // --- Episodi ---
 
 export function getEpisodes(seriesId) {

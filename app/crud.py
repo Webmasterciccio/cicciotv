@@ -220,6 +220,8 @@ def set_episode_watched(
 ) -> models.Episode:
     episode.watched = watched
     episode.watched_at = _now() if watched else None
+    # Click puntuale su un singolo episodio/volume: timestamp affidabile.
+    episode.watched_bulk = False
     db.commit()
     _recompute_series_progress(db, series)
     db.refresh(episode)
@@ -241,6 +243,8 @@ def set_season_watched(
     for episode in episodes:
         episode.watched = watched
         episode.watched_at = now if watched else None
+        # Marcatura di gruppo: il timestamp e' una stima, non il momento reale.
+        episode.watched_bulk = watched
     db.commit()
     _recompute_series_progress(db, series)
     return list_episodes(db, series.id)
@@ -256,6 +260,8 @@ def set_watched_up_to(
         if (episode.season_number, episode.episode_number) <= target_key and not episode.watched:
             episode.watched = True
             episode.watched_at = now
+            # Marcatura di gruppo (piu' episodi in un colpo solo): stima, non dato reale.
+            episode.watched_bulk = True
     db.commit()
     _recompute_series_progress(db, series)
     return list_episodes(db, series.id)
@@ -426,7 +432,10 @@ def _watch_insights(tv_series: list, episodes: list) -> tuple[list[str], list[di
     giorno della settimana, a partire da quando gli episodi sono stati segnati visti."""
     from collections import defaultdict
 
-    watched = [e for e in episodes if e.watched and e.watched_at]
+    # Esclude gli episodi marcati in blocco: il loro timestamp e' una stima,
+    # non il momento reale in cui sono stati visti, quindi falserebbe le
+    # abitudini (giorno/ora preferiti, maratone, ecc.).
+    watched = [e for e in episodes if e.watched and e.watched_at and not e.watched_bulk]
     weekday_counts = [0] * 7
     weekday_data = [{"weekday": i, "count": 0} for i in range(7)]
     if not watched:
@@ -605,6 +614,9 @@ def compute_stats(db: Session, user_id: int) -> dict:
     in_progress.sort(key=lambda x: x["percent"], reverse=True)
 
     watch_insights, episodes_by_weekday = _watch_insights(series, episodes)
+    # Come _watch_insights: le marcature di gruppo hanno un timestamp stimato,
+    # non vanno contate nel grafico mensile per non falsare le abitudini.
+    watched_genuine = [e for e in watched if not e.watched_bulk]
 
     return {
         "total_series": len(series),
@@ -620,7 +632,7 @@ def compute_stats(db: Session, user_id: int) -> dict:
             {"id": sid, "title": title_by_id.get(sid, "?"), "episodes_watched": count}
             for sid, count in top_series
         ],
-        "episodes_per_month": _episodes_per_month(watched),
+        "episodes_per_month": _episodes_per_month(watched_genuine),
         "in_progress": in_progress,
         "movies": movies_stats,
         "watch_insights": watch_insights,

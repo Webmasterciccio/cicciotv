@@ -176,3 +176,9 @@ class Episode(Base):
 
     watched = Column(Boolean, nullable=False, default=False)
     watched_at = Column(DateTime, nullable=True)
+    # True se segnato visto con un'azione di gruppo (stagione intera, "segna
+    # tutto come visto/letto", "segna fino a qui"): il timestamp e' una stima,
+    # non il momento reale in cui e' stato visto. Escluso dalle statistiche
+    # basate sul tempo (grafici per mese/giorno, insight sulle abitudini), ma
+    # conta comunque nei totali (episodi visti, completati, classifiche).
+    watched_bulk = Column(Boolean, nullable=False, default=False)

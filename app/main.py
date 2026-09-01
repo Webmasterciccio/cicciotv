@@ -38,6 +38,7 @@ def _add_missing_columns() -> None:
             "air_date": "VARCHAR",
             "vote_average": "FLOAT",
             "runtime": "INTEGER",
+            "watched_bulk": "BOOLEAN DEFAULT 0",
         },
         "series": {
             "media_type": "VARCHAR DEFAULT 'tv'",

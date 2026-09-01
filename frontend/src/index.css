@@ -179,20 +179,20 @@ select {
 
 @media (max-width: 600px) {
   .series-grid {
-    grid-template-columns: repeat(4, 1fr);
-    gap: 0.6rem;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.7rem;
   }
 
   .series-card-body {
-    padding: 0.4rem 0.5rem 0.6rem;
+    padding: 0.5rem 0.6rem 0.75rem;
   }
 
   .series-card-body h3 {
-    font-size: 0.75rem;
+    font-size: 0.85rem;
   }
 
   .series-card-meta {
-    font-size: 0.68rem;
+    font-size: 0.75rem;
   }
 }
 

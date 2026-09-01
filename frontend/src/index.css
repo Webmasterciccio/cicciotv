@@ -177,10 +177,22 @@ select {
   gap: 1rem;
 }
 
-@media (max-width: 400px) {
+@media (max-width: 600px) {
   .series-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 0.75rem;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.6rem;
+  }
+
+  .series-card-body {
+    padding: 0.4rem 0.5rem 0.6rem;
+  }
+
+  .series-card-body h3 {
+    font-size: 0.75rem;
+  }
+
+  .series-card-meta {
+    font-size: 0.68rem;
   }
 }
 
@@ -241,6 +253,15 @@ select {
 .type-toggle button.on {
   background: var(--accent);
   color: #fff;
+}
+
+/* Tab di stato (In corso/In pari/Da vedere/Vista) sotto il selettore di tipo. */
+.status-tabs {
+  margin-bottom: 1.5rem;
+}
+
+.status-tabs button .count {
+  margin-left: 0.3rem;
 }
 
 .stats-heading {

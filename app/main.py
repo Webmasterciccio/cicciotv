@@ -144,10 +144,42 @@ def _migrate_anime_into_tv() -> None:
             conn.execute(text("UPDATE dismissals SET media_type='tv' WHERE media_type='anime'"))
 
 
+def _backfill_bulk_watch_marks() -> None:
+    """Le marcature 'in blocco' scritte prima che esistesse 'watched_bulk' non
+    hanno il flag impostato: falsano ancora le statistiche basate sul tempo.
+    Un'azione di gruppo scrive pero' lo stesso identico watched_at su piu'
+    episodi della stessa serie in un colpo solo, mentre un click singolo e'
+    sempre una richiesta separata con un timestamp proprio: quel pattern
+    (stessa serie, stesso watched_at, almeno 2 episodi) e' un segnale
+    affidabile per marcarli retroattivamente come bulk. Idempotente: non tocca
+    le righe gia' scritte correttamente dal nuovo codice."""
+    inspector = inspect(engine)
+    if "episodes" not in set(inspector.get_table_names()):
+        return
+    cols = {c["name"] for c in inspector.get_columns("episodes")}
+    if "watched_bulk" not in cols:
+        return  # colonna non ancora presente: la aggiunge _add_missing_columns
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                UPDATE episodes SET watched_bulk = 1
+                WHERE watched_bulk = 0 AND watched_at IS NOT NULL AND (series_id, watched_at) IN (
+                    SELECT series_id, watched_at FROM episodes
+                    WHERE watched_at IS NOT NULL
+                    GROUP BY series_id, watched_at
+                    HAVING COUNT(*) > 1
+                )
+                """
+            )
+        )
+
+
 _add_missing_columns()
 _migrate_multiuser()
 _migrate_sources()
 _migrate_anime_into_tv()
+_backfill_bulk_watch_marks()
 
 app = FastAPI(
     title="CiccioTV",
